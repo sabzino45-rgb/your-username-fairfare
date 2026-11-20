@@ -1,0 +1,24 @@
+name: Check FairFare
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: Tests
+        run: python -m pytest -q
+      - name: Accuracy check
+        run: python tools/run_eval.py --baseline reports/eval_baseline.json
+      - name: Try a sample offer
+        run: |
+          python -c "
+          from fairfare import parse_offer_text, estimate
+          v = estimate(parse_offer_text('UberX\n£12.40\n6 mins (1.8 mi) away\n18 mins (7.2 mi) trip'))
+          print(v.headline())"

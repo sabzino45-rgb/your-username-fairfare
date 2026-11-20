@@ -1,5 +1,7 @@
 # FairFare
 
+[![Check FairFare](https://github.com/sabzino45-rgb/your-username-fairfare/actions/workflows/check.yml/badge.svg)](https://github.com/sabzino45-rgb/your-username-fairfare/actions)
+
 A ride-offer analyzer, plus a Claude Code agent team that improves it in a measured loop.
 
 ## Quick start
