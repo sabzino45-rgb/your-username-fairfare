@@ -30,6 +30,15 @@ You run the loop, assign work, enforce the gates, and keep decisions.md. Each cy
 
 Put each one in reports/cycle-N/human_gates.md as `- [ ] item`. A human ticks it `- [x]`. `tools/gate.py` returns HOLD while any item is unticked.
 
+## The app (app/)
+
+A phone web app, published by `.github/workflows/pages.yml` to GitHub Pages. No build step: plain HTML, CSS and JavaScript modules.
+
+- `app/js/engine.js`: offer parser and verdict. A port of `fairfare/parser.py` and `fairfare/verdict.py`; `tests/test_js_parity.py` keeps them identical, so change both together.
+- `app/js/southwest.js` and `app/js/demand.js`: South West towns, places and the demand forecast. Busy hours are typical patterns, not live data, and the app says so.
+- `app/lang/*.json`: 26 languages. `tests/test_app_languages.py` fails if any language misses a string. Add new strings to `en.json` and every other file together.
+- `app/js/store.js`: phase 1 keeps everything on the phone. Phase 2 swaps this for a shared backend (accounts, shared events and notices, memberships).
+
 ## Shared files
 
 - eval_set/*.jsonl: redacted offer text, correct fields and logged outcomes. This is the regression test and the most valuable asset. Real cases use `"origin": "pilot"`. synthetic.jsonl exists only so the loop runs before pilot data does.

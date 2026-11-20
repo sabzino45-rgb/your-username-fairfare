@@ -2,7 +2,9 @@
 
 [![Check FairFare](https://github.com/sabzino45-rgb/your-username-fairfare/actions/workflows/check.yml/badge.svg)](https://github.com/sabzino45-rgb/your-username-fairfare/actions)
 
-A ride-offer analyzer, plus a Claude Code agent team that improves it in a measured loop.
+A ride-offer analyzer and South West demand guide for ride-hail drivers, in 26 languages, plus a Claude Code agent team that improves it in a measured loop.
+
+**The app:** https://sabzino45-rgb.github.io/your-username-fairfare/ (folder `app/`).
 
 ## Quick start
 
