@@ -7,3 +7,4 @@ __pycache__/
 reports/cycle-*/qa_probes/
 .claude/settings.local.json
 *.zip
+app/data/

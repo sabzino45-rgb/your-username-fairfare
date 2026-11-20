@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths: ["app/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"   # refresh live events every 6 hours
 permissions:
   contents: read
   pages: write
@@ -19,6 +21,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch live events (Ticketmaster, GOV.UK bank holidays)
+        env:
+          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
+        run: python3 tools/fetch_events.py app/data/events.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

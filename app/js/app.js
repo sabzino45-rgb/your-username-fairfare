@@ -1,5 +1,5 @@
 import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS } from "./engine.js";
-import { TOWNS, BANDS, KIND_ICON } from "./southwest.js";
+import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
 import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd } from "./demand.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
 import * as store from "./store.js";
@@ -19,6 +19,7 @@ const P = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  pin: '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
   train: '<rect x="5" y="3" width="14" height="13" rx="3"/><path d="M5 11h14M9 20l-2 2M15 20l2 2M9 16v4M15 16v4"/>',
   plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
   hospital: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 7v6M9 10h6M9 21v-4h6v4"/>',
@@ -231,6 +232,23 @@ function saveOffer() {
   $("#saved").hidden = false;
 }
 
+// ---------- live events (official sources, refreshed every 6 hours by GitHub Actions) ----------
+let live = { events: [], bankHolidays: [], sources: [], generated: null };
+async function loadLive() {
+  try {
+    const res = await fetch("data/events.json", { cache: "no-cache" });
+    if (!res.ok) return;
+    const d = await res.json();
+    live = {
+      ...d,
+      events: (d.events || []).map((e) => ({ ...e, town: (nearestTown(e.lat, e.lon, 15) || {}).id })).filter((e) => e.town),
+    };
+  } catch { /* offline or not published yet: own events still work */ }
+}
+const ownEvents = () => store.get("events", []).map((e) => ({ ...e, own: true }));
+const allEvents = () => [...live.events, ...ownEvents()];
+const townName = (id) => (TOWNS.find((x) => x.id === id) || {}).name || "";
+
 // ---------- demand ----------
 const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 let showEventForm = false;
@@ -247,12 +265,32 @@ function hoursText(place) {
   });
 }
 
+function eventItem(e, mins, showTown = false) {
+  const when = e.start && !e.own ? `${dateTime(new Date(e.start))} → ${e.end}` : dateTime(eventEnd(e));
+  return `<div class="item"><div class="body"><div class="t">${esc(e.name)}</div>
+    <div class="m">${showTown ? esc(townName(e.town)) + " · " : ""}${esc(e.venue || "")} · ${ltr(esc(when))} · ${esc(t("size." + e.size))}</div>
+    <div class="row" style="margin-top:4px">
+      <span class="chip">${esc(e.own ? t("ev.byYou") : e.source)}</span>
+      ${e.endEstimated ? `<span class="chip">${esc(t("ev.estimated"))}</span>` : ""}
+      ${mins > 0 && mins <= 180 ? `<span class="chip">${esc(t("ev.finishesIn", { m: num(mins, 0) }))}</span>` : mins <= 0 ? `<span class="chip">${esc(t("ev.finished"))}</span>` : ""}
+      ${e.url ? `<a class="help" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(t("ev.check"))}</a>` : ""}
+    </div></div>
+    ${e.own ? `<button class="iconbtn" data-del-ev="${e.id}" aria-label="${esc(t("common.delete"))}">${icon("trash")}</button>` : ""}</div>`;
+}
+
 function renderDemand() {
   const tid = town();
   const tw = TOWNS.find((x) => x.id === tid) || TOWNS[0];
-  const events = store.get("events", []);
+  const events = allEvents();
   const now = new Date();
   const grid = weekGrid(tw.id, events);
+  const weekAhead = new Date(now.getTime() + 7 * 864e5);
+  const bigEvents = events.filter((e) => e.size === "big" && eventEnd(e) > now && eventEnd(e) < weekAhead)
+    .sort((a, b) => eventEnd(a) - eventEnd(b)).slice(0, 8);
+  const bank = (live.bankHolidays || []).find((b) => { const d = new Date(b.date + "T12:00"); return d > new Date(now.getTime() - 864e5) && d < weekAhead; });
+  const liveLine = live.sources && live.sources.includes("Ticketmaster")
+    ? t("demand.liveOn", { sources: live.sources.join(", "), time: live.generated ? dateTime(new Date(live.generated)) : "" })
+    : t("demand.liveOff");
   const slot = currentSlot(now);
   const lvl = slot.band >= 0 ? grid[slot.day][slot.band] : 0;
   const peak = nextPeak(grid, now);
@@ -267,7 +305,10 @@ function renderDemand() {
   view.innerHTML = `
     <div><p class="eyebrow">${esc(t("demand.eyebrow"))}</p><h1>${esc(t("demand.title"))}</h1></div>
     <label class="field">${esc(t("demand.town"))}
-      <select id="town">${TOWNS.map((x) => `<option value="${x.id}" ${x.id === tw.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+      <select id="town">${COUNTIES.map((c) => `<optgroup label="${esc(c)}">${TOWNS.filter((x) => x.county === c).map((x) =>
+        `<option value="${x.id}" ${x.id === tw.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>
+    <div class="row"><button class="btn small" id="locate">${icon("pin")}${esc(t("demand.useLocation"))}</button><span class="help" id="loc-msg"></span></div>
+    ${bank ? `<p class="callout">${icon("demand")} ${esc(t("bank.notice", { name: bank.title, date: dateTime(new Date(bank.date + "T00:00")).split(",").slice(0, 2).join(",") }))}</p>` : ""}
     <div class="grid2">
       <section class="card">
         <span class="sub">${esc(t("demand.now"))}</span>
@@ -304,14 +345,17 @@ function renderDemand() {
       </form>
       <div class="list">${townEvents.length ? townEvents.map((e) => {
         const mins = Math.round((eventEnd(e) - now) / 60000);
-        return `<div class="item"><div class="body"><div class="t">${esc(e.name)}</div>
-          <div class="m">${esc(e.venue || "")} · ${esc(dateTime(eventEnd(e)))} · ${esc(t("size." + e.size))}</div>
-          ${mins > 0 && mins <= 180 ? `<span class="chip">${esc(t("ev.finishesIn", { m: num(mins, 0) }))}</span>` : mins <= 0 ? `<span class="chip">${esc(t("ev.finished"))}</span>` : ""}</div>
-          <button class="iconbtn" data-del-ev="${e.id}" aria-label="${esc(t("common.delete"))}">${icon("trash")}</button></div>`;
+        return eventItem(e, mins);
       }).join("") : `<p class="empty">${esc(t("demand.noEvents", { town: tw.name }))}</p>`}</div>
+      <p class="note">${esc(liveLine)}</p>
       <div class="row">${alertsOn
         ? `<span class="toast">${icon("bell")} ${esc(t("alerts.on"))}</span>${perm === "denied" ? `<span class="help">${esc(t("alerts.blocked"))}</span>` : ""}`
         : `<button class="btn small" id="alerts-on">${icon("bell")}${esc(t("alerts.turnOn"))}</button><span class="help">${esc(t("alerts.sub"))}</span>`}</div>
+    </section>
+    <section class="card">
+      <div><h2>${esc(t("demand.bigEvents"))}</h2><p class="sub">${esc(t("demand.bigEventsSub"))}</p></div>
+      <div class="list">${bigEvents.length ? bigEvents.map((e) => eventItem(e, Math.round((eventEnd(e) - now) / 60000), true)).join("")
+        : `<p class="empty">${esc(t("demand.noBig"))}</p>`}</div>
     </section>
     <section class="card">
       <div class="card-head"><div><h2>${esc(t("notices.title"))}</h2><p class="sub">${esc(t("notices.expires"))}</p></div>
@@ -336,6 +380,17 @@ function renderDemand() {
     <p class="note">${esc(t("demand.phase2"))}</p>`;
 
   $("#town").addEventListener("change", (e) => { store.set("town", e.target.value); renderDemand(); });
+  $("#locate").addEventListener("click", () => {
+    const msg = $("#loc-msg");
+    if (!("geolocation" in navigator)) { msg.textContent = t("demand.locFailed"); return; }
+    msg.textContent = t("demand.locating");
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const near = nearestTown(pos.coords.latitude, pos.coords.longitude, 40);
+      if (!near) { msg.textContent = t("demand.locFailed"); return; }
+      store.set("town", near.id);
+      renderDemand();
+    }, () => { msg.textContent = t("demand.locFailed"); }, { maximumAge: 600000, timeout: 15000 });
+  });
   $("#add-ev").addEventListener("click", () => { showEventForm = !showEventForm; renderDemand(); if (showEventForm) $("#ev-name").focus(); });
   $("#ev-cancel").addEventListener("click", () => { showEventForm = false; renderDemand(); });
   $("#ev-form").addEventListener("submit", (e) => {
@@ -368,14 +423,15 @@ const alerted = new Set();
 function checkAlerts() {
   const bar = $("#alert-bar");
   const now = Date.now();
-  const soon = store.get("events", []).filter((e) => {
+  const here = town();
+  const soon = allEvents().filter((e) => {
     const m = (eventEnd(e) - now) / 60000;
-    return m > 0 && m <= 30;
+    return m > 0 && m <= 30 && (e.own || e.town === here || e.size === "big");
   });
   if (!soon.length) { bar.hidden = true; return; }
   const e = soon[0];
   const m = Math.round((eventEnd(e) - now) / 60000);
-  const msg = t("alerts.soon", { name: e.name, venue: e.venue || (TOWNS.find((x) => x.id === e.town) || {}).name || "", m: num(m, 0) });
+  const msg = t("alerts.soon", { name: e.name, venue: e.venue || townName(e.town), m: num(m, 0) });
   bar.innerHTML = `<div>${icon("bell")}<span>${esc(msg)}</span></div>`;
   bar.hidden = false;
   if (store.get("alerts", false) && !alerted.has(e.id) && "Notification" in window && Notification.permission === "granted") {
@@ -491,7 +547,7 @@ function renderOwner() {
     <div><p class="eyebrow">${esc(t("owner.eyebrow"))}</p><h1>${esc(t("owner.title"))}</h1></div>
     <div class="grid2">
       <div class="stat"><div class="k">${esc(t("owner.checks"))}</div><div class="v">${num(store.get("history", []).length, 0)}</div></div>
-      <div class="stat"><div class="k">${esc(t("owner.events"))}</div><div class="v">${num(store.get("events", []).length, 0)}</div></div>
+      <div class="stat"><div class="k">${esc(t("owner.events"))}</div><div class="v">${num(allEvents().length, 0)}</div></div>
       <div class="stat"><div class="k">${esc(t("owner.responses"))}</div><div class="v">${num(fb.length, 0)}</div></div>
       <div class="stat"><div class="k">${esc(t("owner.clear"))}</div><div class="v">${pct("q1", ["yes"])}</div></div>
       <div class="stat"><div class="k">${esc(t("owner.daily"))}</div><div class="v">${pct("q2", ["every"])}</div></div>
@@ -514,6 +570,7 @@ window.addEventListener("hashchange", render);
 
 (async function start() {
   await setLanguage(store.get("lang", null) || guessLanguage());
+  await loadLive();
   render();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
