@@ -1,0 +1,318 @@
+<title>FairFare Offer Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a single narrow column like a phone app - verdict panel on top, inputs below, settings last. */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --fg: #1b1f1d;
+  --muted: #5d6661;
+  --line: #d9ddd8;
+  --accent: #1f5f8b;
+  --go: #1d7a3e;
+  --go-bg: #e3f3e8;
+  --wait: #9a6400;
+  --wait-bg: #fbf0d9;
+  --stop: #b3261e;
+  --stop-bg: #fbe4e2;
+  --unk: #5d6661;
+  --unk-bg: #eceeeb;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121514; --surface: #1b1f1e; --fg: #e8ebe9; --muted: #9aa49f; --line: #2e3533;
+    --accent: #6fb3e0; --go: #5fd08a; --go-bg: #15301f; --wait: #f0b54a; --wait-bg: #33280f;
+    --stop: #ff8a80; --stop-bg: #3a1a18; --unk: #9aa49f; --unk-bg: #232826; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121514; --surface: #1b1f1e; --fg: #e8ebe9; --muted: #9aa49f; --line: #2e3533;
+  --accent: #6fb3e0; --go: #5fd08a; --go-bg: #15301f; --wait: #f0b54a; --wait-bg: #33280f;
+  --stop: #ff8a80; --stop-bg: #3a1a18; --unk: #9aa49f; --unk-bg: #232826; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: 0.01em; margin: 0; line-height: 1; }
+h1 span { color: var(--accent); }
+.tag { font-size: 12px; color: var(--muted); }
+h2 { font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+
+/* Verdict */
+.verdict { border-radius: 12px; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 12px; background: var(--unk-bg); border: 2px solid var(--unk); transition: background .2s, border-color .2s; }
+.verdict[data-d="ACCEPT"] { background: var(--go-bg); border-color: var(--go); }
+.verdict[data-d="MARGINAL"] { background: var(--wait-bg); border-color: var(--wait); }
+.verdict[data-d="DECLINE"] { background: var(--stop-bg); border-color: var(--stop); }
+.word { font-family: var(--display); font-weight: 700; font-size: 56px; line-height: .9; letter-spacing: 0.02em; color: var(--unk); }
+.verdict[data-d="ACCEPT"] .word { color: var(--go); }
+.verdict[data-d="MARGINAL"] .word { color: var(--wait); }
+.verdict[data-d="DECLINE"] .word { color: var(--stop); }
+.sub { font-size: 14px; color: var(--fg); }
+.figs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fig { background: var(--surface); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.fig .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.fig .v { font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fig .v small { font-size: 12px; color: var(--muted); }
+
+.scale { position: relative; height: 34px; margin-top: 4px; }
+.scale .track { position: absolute; left: 0; right: 0; top: 12px; height: 8px; border-radius: 4px; background: var(--surface); }
+.scale .band { position: absolute; top: 12px; height: 8px; border-radius: 4px; background: var(--fg); opacity: .75; }
+.scale .mid { position: absolute; top: 7px; width: 3px; height: 18px; border-radius: 2px; background: var(--fg); transform: translateX(-1px); }
+.scale .target { position: absolute; top: 2px; bottom: 0; width: 0; border-left: 2px dashed var(--accent); }
+.scale .tlabel { position: absolute; top: 24px; font-size: 11px; color: var(--accent); white-space: nowrap; transform: translateX(-50%); }
+.scale .ax { position: absolute; top: 24px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.reasons li { font-size: 12px; background: var(--surface); border-radius: 999px; padding: 3px 10px; color: var(--fg); }
+
+/* Inputs */
+.tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 9px; padding: 3px; margin-bottom: 12px; }
+.tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); font: 600 14px var(--body); padding: 8px; border-radius: 7px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+textarea { width: 100%; min-height: 150px; resize: vertical; font: 14px/1.45 var(--mono); padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+input[type="number"] { width: 100%; font: 16px var(--mono); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.full { grid-column: 1 / -1; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.examples span { font-size: 12px; color: var(--muted); align-self: center; margin-right: 2px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 500 13px var(--body); padding: 5px 11px; border-radius: 999px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.read { margin-top: 12px; font-size: 13px; color: var(--muted); }
+.read b { color: var(--fg); font-weight: 600; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.read .miss { color: var(--stop); }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+details summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 500; }
+details p { font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .verdict { transition: none; } }
+@media (max-width: 380px) { .word { font-size: 46px; } .fig .v { font-size: 17px; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Fair<span>Fare</span></h1>
+    <div class="tag">Offer check · v0 demo</div>
+  </header>
+
+  <div class="verdict" id="verdict" data-d="UNKNOWN" aria-live="polite">
+    <div class="word" id="word">-</div>
+    <div class="sub" id="sub"></div>
+    <div class="figs">
+      <div class="fig"><div class="k">Take-home per hour</div><div class="v" id="ph">-</div></div>
+      <div class="fig"><div class="k">Take-home per mile</div><div class="v" id="pm">-</div></div>
+    </div>
+    <div class="scale" id="scale" aria-hidden="true"></div>
+    <ul class="reasons" id="reasons"></ul>
+  </div>
+
+  <section class="card">
+    <h2>The offer</h2>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-paste" aria-selected="true">Paste offer text</button>
+      <button role="tab" id="tab-type" aria-selected="false">Type numbers</button>
+    </div>
+    <div id="pane-paste">
+      <textarea id="ocr" spellcheck="false" aria-label="Offer card text"></textarea>
+      <div class="examples"><span>Try:</span>
+        <button class="chip" data-ex="0">Typical</button>
+        <button class="chip" data-ex="1">Long pickup</button>
+        <button class="chip" data-ex="2">Surge</button>
+        <button class="chip" data-ex="3">Short hop</button>
+        <button class="chip" data-ex="4">Blurry scan</button>
+      </div>
+      <div class="read" id="read"></div>
+    </div>
+    <div id="pane-type" hidden>
+      <div class="grid">
+        <label class="full">Fare shown (£)<input type="number" id="m-fare" step="0.01" min="0" value="12.40"></label>
+        <label>Pickup minutes<input type="number" id="m-pmin" step="1" min="0" value="6"></label>
+        <label>Pickup miles<input type="number" id="m-pmi" step="0.1" min="0" value="1.8"></label>
+        <label>Trip minutes<input type="number" id="m-tmin" step="1" min="0" value="18"></label>
+        <label>Trip miles<input type="number" id="m-tmi" step="0.1" min="0" value="7.2"></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Your targets</h2>
+    <div class="grid">
+      <label>Target £ per hour<input type="number" id="t-hr" step="0.5" min="0" value="18"></label>
+      <label>Target £ per mile<input type="number" id="t-mi" step="0.05" min="0" value="1.00"></label>
+      <label class="full">Your running cost per mile (£, fuel or charging plus wear)<input type="number" id="t-cost" step="0.01" min="0" value="0.20"></label>
+    </div>
+  </section>
+
+  <details>
+    <summary>How it works</summary>
+    <p>FairFare reads the fare, pickup and trip from the offer card. It takes off your running costs and gives a range, not a single number: the low end assumes slow traffic and some unpaid miles after drop-off, and the high end assumes a clean run. ACCEPT means even the low end hits your targets, DECLINE means even the high end misses them, and MARGINAL means it depends on the traffic.</p>
+    <p>Everything runs in your browser. Nothing you paste is sent anywhere. This demo reads pasted text; reading screenshots directly comes later. In the real app, the verdict shows only as one word and a colour while you're driving.</p>
+  </details>
+  <p class="note">Demo only. The numbers are estimates and haven't been checked against real drivers yet.</p>
+</div>
+
+<script>
+// ---- Port of fairfare/parser.py ----
+const KM_PER_MILE = 1.609344;
+const REQUIRED = ["fare", "pickup_min", "pickup_miles", "trip_min", "trip_miles"];
+const NUM = "(\\d+(?:[.,]\\d+)?)";
+const f = s => parseFloat(s.replace(",", "."));
+
+function parseOfferText(text) {
+  const o = { fare: null, pickup_min: null, pickup_miles: null, trip_min: null, trip_miles: null, surge: null, rider_rating: null, source: "scan", warnings: [] };
+  if (!text || !text.trim()) { o.warnings.push("empty_text"); return o; }
+  const surgeRe = new RegExp("\\+\\s?£\\s?" + NUM + "[^\\n]*?(?:surge|boost|included)", "i");
+  const sm = surgeRe.exec(text);
+  if (sm) o.surge = f(sm[1]);
+  const fareRe = new RegExp("£\\s?" + NUM, "g");
+  let m;
+  while ((m = fareRe.exec(text))) {
+    if (sm && sm.index <= m.index && m.index < sm.index + sm[0].length) continue;
+    o.fare = f(m[1]); break;
+  }
+  const legRe = new RegExp(NUM + "[ \\t]*(?:mins?|minutes?)[ \\t]*[(\\[·•,-]?[ \\t]*" + NUM + "[ \\t]*(mi|miles?|km)\\b\\)?[ \\t]*(away|trip|pickup)?", "gi");
+  const legs = [];
+  while ((m = legRe.exec(text))) {
+    let label = (m[4] || "").toLowerCase();
+    const before = text.slice(Math.max(0, m.index - 12), m.index).toLowerCase();
+    if (!label) label = before.includes("pickup") ? "pickup" : before.includes("trip") ? "trip" : "";
+    const d = f(m[2]);
+    legs.push([label, f(m[1]), m[3].toLowerCase().startsWith("km") ? d / KM_PER_MILE : d]);
+  }
+  let pickup = legs.find(l => l[0] === "away" || l[0] === "pickup") || null;
+  let trip = legs.find(l => l[0] === "trip") || null;
+  const unl = legs.filter(l => l[0] === "");
+  if (!pickup && unl.length) { pickup = unl.shift(); o.warnings.push("pickup_inferred_from_order"); }
+  if (!trip && unl.length) { trip = unl.shift(); o.warnings.push("trip_inferred_from_order"); }
+  const r2 = x => Math.round(x * 100) / 100;
+  if (pickup) { o.pickup_min = pickup[1]; o.pickup_miles = r2(pickup[2]); }
+  if (trip) { o.trip_min = trip[1]; o.trip_miles = r2(trip[2]); }
+  const rr = new RegExp(NUM + "\\s*[★*]").exec(text);
+  if (rr && f(rr[1]) >= 1 && f(rr[1]) <= 5) o.rider_rating = f(rr[1]);
+  if (o.fare !== null && !(o.fare >= 1 && o.fare <= 1000)) { o.warnings.push("fare_out_of_range"); o.fare = null; }
+  for (const leg of ["pickup", "trip"]) {
+    const mins = o[leg + "_min"], miles = o[leg + "_miles"];
+    if (mins !== null && miles !== null && mins > 0 && miles / (mins / 60) > 90) {
+      o.warnings.push(leg + "_speed_implausible"); o[leg + "_min"] = null; o[leg + "_miles"] = null;
+    }
+  }
+  o.missing = REQUIRED.filter(k => o[k] === null);
+  return o;
+}
+
+// ---- Port of fairfare/verdict.py ----
+const A = { tf: [1.00, 1.15, 1.40], overhead: 2.0, dead: [0.0, 0.15, 0.35], short: 8.0, longPickup: 0.6 };
+
+function scenario(o, p, tf, dead) {
+  const miles = o.pickup_miles + o.trip_miles * (1 + dead);
+  const minutes = (o.pickup_min + o.trip_min) * tf + A.overhead;
+  const take = o.fare - miles * p.cost;
+  return [take / (minutes / 60), take / miles];
+}
+
+function estimate(o, p) {
+  if (o.missing.length) return { d: "UNKNOWN", reasons: ["missing"] };
+  if (o.pickup_miles + o.trip_miles <= 0 || o.pickup_min + o.trip_min <= 0) return { d: "UNKNOWN", reasons: ["zero"] };
+  const best = scenario(o, p, A.tf[0], A.dead[0]), mid = scenario(o, p, A.tf[1], A.dead[1]), worst = scenario(o, p, A.tf[2], A.dead[2]);
+  const reasons = []; let score = 3;
+  if (o.source === "scan" && o.warnings.some(w => w.includes("inferred"))) { score--; reasons.push("layout_inferred"); }
+  if (o.trip_min < A.short) { score--; reasons.push("short_trip"); }
+  if (o.trip_min > 0 && o.pickup_min / o.trip_min > A.longPickup) { score--; reasons.push("long_pickup"); }
+  if (o.surge) reasons.push("surge_included");
+  const conf = score === 3 ? "high" : score === 2 ? "medium" : "low";
+  let d;
+  if (worst[0] >= p.hr && worst[1] >= p.mi) d = "ACCEPT";
+  else if (best[0] < p.hr || best[1] < p.mi) d = "DECLINE";
+  else d = "MARGINAL";
+  return { d, conf, reasons, hr: [worst[0], mid[0], best[0]], mi: [worst[1], mid[1], best[1]] };
+}
+
+// ---- UI ----
+const EXAMPLES = [
+  "UberX\n£12.40\n4.92 ★\n6 mins (1.8 mi) away\n18 mins (7.2 mi) trip\nAccept",
+  "UberX\n£9.80\n4.88 ★\n17 mins (6.4 mi) away\n15 mins (5.9 mi) trip\nAccept",
+  "Comfort\n£31.60\n4.97★\n4 min (2.1 km) away\n32 min (24.5 km) trip\n+£6.20 surge included",
+  "UberX\n£5.10\n4.81 ★\n3 mins (0.9 mi) away\n5 mins (1.6 mi) trip",
+  "UberX\nE14.70\n4.9 ★\n6 rnins (2.0 mi) away\n22 rnins (9.1 mi) trip",
+];
+const REASON_TEXT = {
+  layout_inferred: "Card layout unusual - double-check the numbers",
+  short_trip: "Very short trip - estimate is rough",
+  long_pickup: "Long unpaid pickup",
+  surge_included: "Surge included in fare",
+};
+const FIELD_NAMES = { fare: "fare", pickup_min: "pickup time", pickup_miles: "pickup distance", trip_min: "trip time", trip_miles: "trip distance" };
+const $ = id => document.getElementById(id);
+const num = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
+let mode = "paste";
+
+function money(x) { return (x < 0 ? "-£" : "£") + Math.abs(x).toFixed(x >= 100 || x <= -100 ? 0 : 2).replace(/\.00$/, ""); }
+
+function update() {
+  const p = { hr: num("t-hr") ?? 18, mi: num("t-mi") ?? 1, cost: num("t-cost") ?? 0.2 };
+  let o;
+  if (mode === "paste") {
+    o = parseOfferText($("ocr").value);
+    const parts = REQUIRED.map(k => o[k] === null
+      ? `<span class="miss">${FIELD_NAMES[k]}: not found</span>`
+      : `${FIELD_NAMES[k]} <b>${k === "fare" ? "£" + o[k].toFixed(2) : o[k] + (k.endsWith("min") ? " min" : " mi")}</b>`);
+    if (o.surge) parts.push(`surge <b>£${o.surge.toFixed(2)}</b>`);
+    $("read").innerHTML = "Read from the card: " + parts.join(" · ");
+  } else {
+    o = { fare: num("m-fare"), pickup_min: num("m-pmin"), pickup_miles: num("m-pmi"), trip_min: num("m-tmin"), trip_miles: num("m-tmi"), surge: null, source: "manual", warnings: [] };
+    o.missing = REQUIRED.filter(k => o[k] === null);
+  }
+  const v = estimate(o, p);
+  $("verdict").dataset.d = v.d;
+  if (v.d === "UNKNOWN") {
+    $("word").textContent = "CAN'T TELL";
+    $("sub").textContent = o.missing && o.missing.length
+      ? "Couldn't read the " + o.missing.map(k => FIELD_NAMES[k]).join(", ") + ". Switch to Type numbers and enter them when you're parked."
+      : "The times or distances are zero. Check the numbers.";
+    $("ph").textContent = "-"; $("pm").textContent = "-"; $("scale").innerHTML = ""; $("reasons").innerHTML = "";
+    return;
+  }
+  $("word").textContent = v.d;
+  const subs = { ACCEPT: "Even with slow traffic, this beats your targets.", DECLINE: "Even on a clean run, this misses your targets.", MARGINAL: "Depends on traffic. It could go either way." };
+  $("sub").textContent = subs[v.d] + " " + (v.conf === "high" ? "High" : v.conf === "medium" ? "Medium" : "Low") + " confidence.";
+  $("ph").innerHTML = `${money(v.hr[0])}–${money(v.hr[2])}<small> /hr</small>`;
+  $("pm").innerHTML = `${money(v.mi[0])}–${money(v.mi[2])}<small> /mi</small>`;
+  // Scale: £0 to a round max that fits the range and target
+  const max = Math.max(10, Math.ceil(Math.max(v.hr[2], p.hr) * 1.15 / 10) * 10);
+  const min = Math.min(0, Math.floor(v.hr[0] / 10) * 10);
+  const pos = x => ((Math.min(Math.max(x, min), max) - min) / (max - min) * 100).toFixed(2) + "%";
+  const lo = pos(v.hr[0]), hi = pos(v.hr[2]);
+  $("scale").innerHTML =
+    `<div class="track"></div><div class="band" style="left:${lo};width:calc(${hi} - ${lo})"></div>` +
+    `<div class="mid" style="left:${pos(v.hr[1])}"></div>` +
+    `<div class="target" style="left:${pos(p.hr)}"></div><div class="tlabel" style="left:${pos(p.hr)}">target ${money(p.hr)}/hr</div>` +
+    `<div class="ax" style="left:0">${money(min)}</div><div class="ax" style="right:0">${money(max)}</div>`;
+  $("reasons").innerHTML = v.reasons.map(r => `<li>${REASON_TEXT[r] || r}</li>`).join("");
+}
+
+function setMode(m) {
+  mode = m;
+  $("tab-paste").setAttribute("aria-selected", m === "paste");
+  $("tab-type").setAttribute("aria-selected", m === "type");
+  $("pane-paste").hidden = m !== "paste";
+  $("pane-type").hidden = m !== "type";
+  update();
+}
+$("tab-paste").addEventListener("click", () => setMode("paste"));
+$("tab-type").addEventListener("click", () => setMode("type"));
+document.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => { $("ocr").value = EXAMPLES[+b.dataset.ex]; update(); }));
+document.querySelectorAll("input, textarea").forEach(el => el.addEventListener("input", update));
+$("ocr").value = EXAMPLES[0];
+update();
+</script>
