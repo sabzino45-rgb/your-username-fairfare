@@ -170,9 +170,10 @@ def test_rate_line_is_not_the_fare():
 def test_unlabelled_navigation_outside_a_labelled_card_is_ignored():
     o = parse_offer_text("12 min · 5.1 mi\nTurn left\nUberX\n£13.60\n7 mins (2.4 mi) away\n21 mins (8.6 mi) trip")
     assert fields(o) == (13.60, 7, 2.4, 21, 8.6)
-    # ...but an unlabelled leg between pickup and trip (multi-stop) is refused.
+    # ...but an unlabelled leg between pickup and trip (multi-stop) makes the trip total unclear:
+    # the trip is refused, the fare and pickup are still the card's.
     o = parse_offer_text("£22.40\n6 mins (1.8 mi) away\n10 mins (3.2 mi) to stop\n12 mins (5 mi) trip")
-    assert fields(o) == (None,) * 5
+    assert fields(o) == (22.40, 6, 1.8, None, None) and "extra_leg" in o.warnings
 
 
 def test_large_paste_is_fast():
@@ -181,3 +182,72 @@ def test_large_paste_is_fast():
     t = time.time()
     parse_offer_text(big)
     assert time.time() - t < 2.0
+
+
+# ---- Cycle 1, attempt 3: general rules (examples are my own, not QA's fresh cases) ----
+
+def test_blank_lines_between_ocr_lines_do_not_push_the_fare_out_of_the_window():
+    # Tesseract page-seg mode 11 puts a blank line between text lines.
+    card = "UberX\n£13.75\n+£2.20 surge included\nExclusive\n4.85 ★\n5 mins (1.6 mi) away\n19 mins (7.9 mi) trip"
+    for sep in ("\n\n", "\n \n", "\n\n\n"):
+        o = parse_offer_text(card.replace("\n", sep))
+        assert fields(o) == (13.75, 5, 1.6, 19, 7.9), repr(sep)
+
+
+def test_amount_followed_by_words_is_a_message_not_a_fare():
+    # Starts its line but reads as a sentence: transfer, promo or chat line.
+    for noise in ("£40.00 sent to Jo via bank app", "£12 back when you ride 5 times",
+                  "£18 for the takeaway lol", "£7.50 from Priya"):
+        o = parse_offer_text("10:01 4G 77%\n" + noise + "\nComfort\n£16.20\n4.9 ★\n"
+                             "5 mins (1.9 mi) away\n20 mins (8.4 mi) trip")
+        assert o.fare == 16.20, noise
+
+
+def test_two_plausible_fares_on_screen_refuse_instead_of_guessing():
+    # A second bare amount below the card that could equally be the fare: refuse.
+    o = parse_offer_text("UberX\n£11.90\n4 mins (1.2 mi) away\n15 mins (5.5 mi) trip\n£13.40")
+    assert o.fare is None and "fare_ambiguous" in o.warnings
+    # The same amount repeated is not a conflict.
+    o = parse_offer_text("UberX\n£11.90\n4 mins (1.2 mi) away\n15 mins (5.5 mi) trip\n£11.90")
+    assert o.fare == 11.90
+
+
+def test_earnings_pill_next_to_status_label_is_never_a_candidate():
+    for label in ("You're online", "Finding trips", "Today's earnings", "Offline"):
+        o = parse_offer_text("£58.10\n" + label + "\n4 mins (1.4 mi) away\n13 mins (5.0 mi) trip")
+        assert o.fare is None, label
+
+
+def test_fare_on_the_accept_button_is_the_card_fare():
+    o = parse_offer_text("£58.10\nYou're online\n4 mins (1.4 mi) away\n13 mins (5.0 mi) trip\nAccept £9.35")
+    assert o.fare == 9.35
+    # A different fare above the legs as well: can't tell which, refuse.
+    o = parse_offer_text("£12.10\n4 mins (1.4 mi) away\n13 mins (5.0 mi) trip\nAccept £9.35")
+    assert o.fare is None and "fare_ambiguous" in o.warnings
+
+
+def test_non_pound_currency_or_missing_symbol_on_card_is_unreadable_fare():
+    for garbled in ("€14.25", "$14.25", "14.25", "E 14.25"):
+        o = parse_offer_text("£25.00\nUberX\n" + garbled + "\n4.9 ★\n5 mins (1.6 mi) away\n19 mins (7.9 mi) trip")
+        assert o.fare is None and "fare_unreadable" in o.warnings, garbled
+    # A rider rating that lost its star is not taken for a garbled fare.
+    o = parse_offer_text("UberX\n£14.25\n4.92\n5 mins (1.6 mi) away\n19 mins (7.9 mi) trip")
+    assert o.fare == 14.25
+
+
+def test_add_on_line_starting_with_plus_is_not_the_fare():
+    o = parse_offer_text("UberX\n£33.60\n+£3.50 congestion charge\n6 mins (2.0 mi) away\n41 mins (17.3 mi) trip")
+    assert o.fare == 33.60
+
+
+def test_compact_hours():
+    for leg in ("1h20min", "1h 20m", "1hr20", "1 hr 20", "80 min", "1h20 mins"):
+        o = parse_offer_text(f"UberX\n£39.00\n5 mins (1.5 mi) away\n{leg} (30.2 mi) trip")
+        assert (o.trip_min, o.trip_miles) == (80, 30.2), leg
+    o = parse_offer_text("UberX\n£52.00\n5 mins (1.5 mi) away\n2h (60 mi) trip")
+    assert o.trip_min == 120
+
+
+def test_multi_stop_keeps_fare_and_pickup():
+    o = parse_offer_text("UberX\n£26.30\n5 mins (1.4 mi) away\nStop · 8 mins (2.9 mi)\n20 mins (7.7 mi) trip")
+    assert fields(o) == (26.30, 5, 1.4, None, None) and "extra_leg" in o.warnings

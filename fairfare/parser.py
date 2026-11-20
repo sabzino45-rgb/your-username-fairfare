@@ -68,25 +68,33 @@ _NOT_FARE = re.compile(
     r"\b(?:off|discount|promo|code|voucher|coupon|save|saved|earned|today|week|weekly|"
     r"balance|cash ?out|tips?|bonus|quest|reward|refer|cashback|credit|wallet|extra|"
     r"surge|boost|includes?|included|incl|"
-    r"spent|spend|paid|pay|payment|received|bank|card|transfer|order|refund|bill)\b",
+    r"spent|spend|paid|pay|payment|received|bank|card|transfer|order|refund|bill|"
+    r"from|via|paypal|sent|earnings)\b",
     re.I | re.ASCII,
 )
-# The fare is the prominent amount that starts its line. Only ride-type names (and
-# punctuation) may come before it: "£12.40", "UberX £12.40", "~ £14.60".
-_FARE_PREFIX_OK = re.compile(
-    r"^(?:[^A-Za-z0-9]|\b(?:uber|uberx|comfort|exclusive|xl|exec|executive|green|pet|lux|"
-    r"black|electric|priority|saver|wav|access|assist)\b)*$",
-    re.I | re.ASCII,
-)
+# A card's fare line holds the amount and nothing else that reads as words: only punctuation,
+# ride-type names or the Accept button may stand before or after it ("£12.40", "UberX £12.40",
+# "£9.15 · UberX", "Accept £10.20"); a leg may follow on the same line ("£7.20 · 3 min (1.0 mi)").
+# Anything else ("£30 for the shopping", "£25.00 from Sam") is a message, banner or notification.
+_FARE_WORDS = (r"(?:[^A-Za-z0-9]|\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|"
+               r"lux|black|electric|priority|saver|wav|access|assist|accept)\b)*")
+_FARE_PREFIX_OK = re.compile("^" + _FARE_WORDS + "$", re.I | re.ASCII)
+_FARE_TRAIL_OK = _FARE_PREFIX_OK
+_ACCEPT = re.compile(r"\baccept\b", re.I | re.ASCII)
+# A status label next to a bare amount marks the earnings pill ("£84.20" / "You're online").
+_PILL_LABEL = re.compile(r"\b(?:online|offline|finding trips|earnings|today|this week)\b", re.I | re.ASCII)
 _RATE_AFTER = re.compile(r"[ \t]*(?:/|per\b)", re.I | re.ASCII)            # "£1.14/mi", "£0.62 per min"
 _RANGE_AFTER = re.compile(r"[ \t]*[-–—~][ \t]*£[ \t]?" + _NUM)    # "£10.80–£13.20"
-# A card fare whose £ was misread as a letter ("E11.10", "fl2.40"): the card's own fare is unreadable.
+# A card fare whose £ was misread ("E11.10", "fl2.40", "€9.60", "$12.95") or dropped ("15.75"),
+# alone on its line: the card's own fare is unreadable, so no other amount may stand in for it.
+# Without any symbol, values up to 5 are left alone: that is a rider rating whose star was lost.
 _GARBLED_FARE_LINE = re.compile(
-    r"^[^A-Za-z0-9£]*[A-Za-z]{1,2}[ \t]?[0-9OoIl]{1,3}[.,][0-9OoIl]{2}[^A-Za-z0-9£]*$", re.ASCII
+    r"^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})[^A-Za-z0-9£]*$", re.ASCII
 )
 # Lines whose min/distance pair is navigation, not an offer leg.
 _NOT_LEG = re.compile(r"\b(?:arriv\w*|eta|remaining|destination|route|to go)\b", re.I | re.ASCII)
-# The fare sits on the card just above the legs: at most this many lines above the first leg.
+# The fare sits on the card just above the legs: at most this many NON-BLANK lines above the
+# first leg (OCR page-segmentation modes put blank lines between text lines).
 _FARE_WINDOW_LINES = 4
 # Plausibility of a fare against the legs it was read with (UK private hire, generous):
 # base £20 + £6/mile + £1/minute over pickup+trip is above any surge we know of (about 4x
@@ -97,7 +105,8 @@ _SURGE = re.compile(r"\+\s?£\s?" + _NUM + r"[^\n]*?(?:surge|boost|included)", r
 # "6 mins (1.8 mi) away" / "6 min (2.9 km) away" / "Pickup: 6 min · 1.8 mi" / "1 hr 20 mins (25 mi) trip"
 _LEG = re.compile(
     # [ \t] not \s: a label must be on the same line, or "Trip" on the next line is stolen.
-    r"(?:([0-9]+)[ \t]*(?:hours?|hrs?|h)\b[ \t]*(?:([0-9]+)[ \t]*(?:mins?|minutes?))?|"
+    # Hours: "1 hr 20 mins", "1h20min", "1h 20m", "1hr20", "2 hrs".
+    r"(?:([0-9]+)[ \t]*(?:hours?|hrs?|h)(?![A-Za-z])[ \t]*(?:([0-9]+)[ \t]*(?:minutes?|mins?|m)?(?![A-Za-z]))?|"
     + _NUM + r"[ \t]*(?:mins?|minutes?))"
     r"[ \t]*[(\[·•,-]?[ \t]*" + _NUM + r"[ \t]*(mi|miles?|km)\b\)?[ \t]*(away|trip|pickup)?",
     re.I | re.ASCII,
@@ -109,12 +118,30 @@ def _f(s: str) -> float:
     return float(s.replace(",", "."))
 
 
+_BLANK = re.compile(r"[ \t\r\f\v]*$")  # explicit set, identical in JS
+
+
 class _Lines:
     """Line number / line text for a position, in O(log n) (large pastes stay fast)."""
 
     def __init__(self, text: str):
         self.text = text
         self.starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "\n"]
+        # nb[n]: how many non-blank lines come before line n; nonblank: indices of non-blank lines.
+        self.nb, self.nonblank = [], []
+        for n in range(len(self.starts)):
+            self.nb.append(len(self.nonblank))
+            if not _BLANK.match(self.line(n)):
+                self.nonblank.append(n)
+
+    def neighbours(self, n: int) -> list[str]:
+        """The non-blank lines just before and just after line n."""
+        k = self.nb[n]
+        out = [self.line(self.nonblank[k - 1])] if k > 0 else []
+        j = k + 1 if k < len(self.nonblank) and self.nonblank[k] == n else k
+        if j < len(self.nonblank):
+            out.append(self.line(self.nonblank[j]))
+        return out
 
     def no(self, pos: int) -> int:
         return bisect.bisect_right(self.starts, pos) - 1
@@ -133,6 +160,20 @@ def _fix_leg_token(m: re.Match) -> str:
     if not re.search(r"[0-9]", tok):
         return m.group(0)
     return m.group(1) + tok.translate(_OCR_DIGITS)
+
+
+def _garbled_fare_line(line: str) -> bool:
+    g = _GARBLED_FARE_LINE.match(line)
+    return bool(g) and (g.group(1) is not None or _f(g.group(2).translate(_OCR_DIGITS)) > 5)
+
+
+def _plausible(value: float, legs: list) -> bool:
+    miles = sum(l[2] for l in legs)
+    mins = sum(l[1] for l in legs)
+    if miles <= 0:
+        return True
+    top = _FARE_MAX_BASE + _FARE_MAX_PER_MILE * miles + _FARE_MAX_PER_MIN * mins
+    return _FARE_MIN_PER_MILE * miles <= value <= top
 
 
 def _refuse_all(offer: Offer, why: str) -> Offer:
@@ -179,20 +220,27 @@ def parse_offer_text(text: str) -> Offer:
         return _refuse_all(offer, "multiple_offers")
     if pickups and trips:
         lo, hi = sorted((pickups[0][3], trips[0][3]))
-        if any(lo < l[3] < hi for l in unlabeled):
-            return _refuse_all(offer, "extra_leg")  # e.g. a multi-stop trip: the leg sum is unclear
-        if unlabeled:
+        unlabeled_inside = [l for l in unlabeled if lo < l[3] < hi]
+        if len(unlabeled) > len(unlabeled_inside):
             offer.warnings.append("unlabelled_leg_ignored")  # outside the card (navigation, etc.)
         unlabeled = []
-        used = [pickups[0], trips[0]]
+        if unlabeled_inside:
+            # A stop leg between pickup and trip (multi-stop): the trip total is unclear, the pickup isn't.
+            offer.warnings.append("extra_leg")
+            trips = []
+            used = [pickups[0]]
+        else:
+            used = [pickups[0], trips[0]]
     elif len(legs) > 2:
         # Several offers on one screen (e.g. a Trip Radar list): can't tell which one is meant.
         return _refuse_all(offer, "multiple_offers")
     else:
         used = legs
 
-    # Fare candidates: prominent £ amounts that start their line, not surge, rate, promo or notification.
-    fares = []  # (position, line number, value)
+    # Fare candidates: £ amounts on a card-fare-shaped line (see _FARE_WORDS); not the surge,
+    # an add-on ("+£5.00 airport fee"), a rate, a promo/payment/earnings line or the earnings pill.
+    fares = []  # (position, non-blank line number, value, on the Accept line)
+    range_seen = False
     for m in _FARE.finditer(text):
         if surge_m and surge_m.start() <= m.start() < surge_m.end():
             continue
@@ -200,38 +248,64 @@ def parse_offer_text(text: str) -> Offer:
             continue
         n = lines.no(m.start())
         line = lines.line(n)
-        if _NOT_FARE.search(line) or not _FARE_PREFIX_OK.match(line[: m.start() - lines.starts[n]]):
+        line_end = lines.starts[n] + len(line)
+        prefix = line[: m.start() - lines.starts[n]]
+        if _NOT_FARE.search(line) or not _FARE_PREFIX_OK.match(prefix) or prefix.rstrip().endswith("+"):
             continue
         if _RATE_AFTER.match(text, m.end()):
             continue
-        value = _f(m.group(1).translate(_OCR_DIGITS))
+        value, end = _f(m.group(1).translate(_OCR_DIGITS)), m.end()
         rng = _RANGE_AFTER.match(text, m.end())
         if rng:
-            # A fare range: use the lower end, the amount the offer guarantees.
-            value = min(value, _f(rng.group(1)))
-            offer.warnings.append("fare_range_low_end")
-        fares.append((m.start(), n, value))
+            value, end = min(value, _f(rng.group(1))), rng.end()  # a range: the lower, guaranteed end
+        trail_end = next((l[3] for l in legs if end <= l[3] < line_end), line_end)
+        if not _FARE_TRAIL_OK.match(text[end:trail_end]):
+            continue
+        if any(_PILL_LABEL.search(nb) for nb in lines.neighbours(n)):
+            continue
+        range_seen = range_seen or bool(rng)
+        fares.append((m.start(), lines.nb[n], value, bool(_ACCEPT.search(line))))
 
     if used:
         first, last = min(l[3] for l in used), max(l[3] for l in used)
         if any(first < c[0] < last for c in fares):
             return _refuse_all(offer, "multiple_offers")  # a second fare between the legs: stacked offers
         anchor_line = lines.no(first)
-        near = [c for c in fares if c[0] < first and anchor_line - c[1] <= _FARE_WINDOW_LINES]
-        start_line = near[-1][1] + 1 if near else max(0, anchor_line - _FARE_WINDOW_LINES)
-        garbled = any(_GARBLED_FARE_LINE.match(lines.line(n)) and re.search(r"[0-9]", lines.line(n))
-                      for n in range(start_line, anchor_line))
-        if garbled:
+        anchor_nb = lines.nb[anchor_line]
+        plausible = [c for c in fares if _plausible(c[2], used)]
+        on_accept = {c[2] for c in plausible if c[3]}
+        near = [c for c in fares if c[0] < first and anchor_nb - c[1] <= _FARE_WINDOW_LINES]
+        after = near[-1][0] if near else -1
+        garbled = any(
+            lines.starts[n] > after and anchor_nb - lines.nb[n] <= _FARE_WINDOW_LINES
+            and _garbled_fare_line(lines.line(n))
+            for n in range(anchor_line))
+        if on_accept:
+            # The amount on the Accept button is the card's own fare.
+            # A different fare above the legs as well means we can't tell: refuse.
+            if len(on_accept) == 1 and not (near and near[-1][2] not in on_accept):
+                offer.fare = on_accept.pop()
+            else:
+                offer.warnings.append("fare_ambiguous")
+        elif garbled:
             offer.warnings.append("fare_unreadable")  # the card's own fare line is misread: don't substitute
         elif near:
-            offer.fare = near[-1][2]
+            pick = near[-1]
+            if any(c[2] != pick[2] for c in plausible if c is not pick):
+                # Another plausible fare elsewhere on the screen: never guess between them.
+                offer.warnings.append("fare_ambiguous")
+            else:
+                offer.fare = pick[2]
         elif fares:
             offer.warnings.append("fare_not_near_legs")
     elif fares:
-        if len({c[2] for c in fares}) == 1:
-            offer.fare = fares[0][2]
+        values = {c[2] for c in fares if c[3]} or {c[2] for c in fares}
+        if len(values) == 1:
+            offer.fare = values.pop()
         else:
             offer.warnings.append("fare_ambiguous")
+    if range_seen and offer.fare is not None:
+        offer.warnings.append("fare_range_low_end")
 
     pickup = pickups[0] if pickups else None
     trip = trips[0] if trips else None

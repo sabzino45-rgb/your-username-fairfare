@@ -172,3 +172,84 @@ Each of these could be wrong on real screenshots. Each one fails safe (None), so
 - **Keywords and labels are English.** Ignoring unlabelled navigation only works when the card's own legs carry the English "away"/"trip"/"Pickup" labels. A fully Spanish card next to a navigation bar would still be refused as `multiple_offers`.
 
 **Recommendation:** have QA write a fresh unseen set before the gate decision, because this holdout is no longer unseen. The real test is redacted pilot screenshots.
+
+---
+
+# Attempt 3 (after the QA "Attempt 2 re-test", reports/cycle-1/qa.md)
+
+**All numbers are synthetic or drawn imitations. None comes from a real Uber screenshot.**
+
+I read QA's 21 fresh cases (`qa_probes/fresh_cases.jsonl`) to find the general rule behind each failure. I did **not** add them to eval_set. Since I have now seen them, they are no longer unseen either. QA's next, unseen set is the real check.
+
+## Numbers
+
+| | Attempt 2 rules | Attempt 3 rules |
+|---|---|---|
+| scan_accuracy_overall, all 92 eval cases (judged) | 1.00 | **1.00** (goal >= 0.99 met, on synthetic) |
+| original 60 (accuracy, fallback) | 1.00, 0.15 | 1.00, 0.15 (all 60 per-case rows identical to eval_before.json) |
+| QA fresh text cases (21): fare correct / missed / wrong | 14 / 2 / **5** | 19 / 1 / 1 (see f16 below) |
+| QA fresh, cases with any wrong number | 6 | 1 (f16) |
+| QA real-OCR scans (26 images, QA's saved OCR text re-parsed): fields correct / missed / wrong | 124 / 2 / 4 | 128 / 0 / 2 (f16 light and dark) |
+| Python vs JS differences (41 probes + 21 fresh) | 0 | 0 |
+| Fields that change when blank lines are inserted (all 113 eval and fresh texts, with `\n\n`, `\n \n` and `\n\n\n`) | f15 changed | **0** |
+
+**f16 "wrong" is the new Accept-button rule doing what it was asked to do.**
+- The screen has an earnings pill "£71.30" above, then "You're online", the legs, and "Accept £10.20".
+- QA's expected value is None, but QA's own table gives the true fare as £10.20, which is what we now read.
+- Measured against the true fare, it is correct. Before, the parser read £71.30 and gave ACCEPT.
+
+**Manual-entry share on normal, unambiguous fresh cards** (all five fields readable; 13 of the 21):
+- 2 of 13 go to manual entry, with or without blank lines between the lines. Both are OCR garbles that the parser refuses rather than reads wrong:
+  - f11: "7 rnins", see below.
+  - f18: "£ 12 .40" has a space inside the number. The parser now refuses it; before, it read £12.00.
+- On the real-OCR images, readable scans going to manual entry went from 2 of 22 (f15, both modes, caused by the blank-line window) to **0**.
+
+**Other checks:**
+- `pytest -q`: 66 passed. That includes JS parity on every eval file, 23 adversarial texts and manual-entry decisions.
+- `--baseline reports/eval_baseline.json` and `--baseline reports/cycle-1/eval_before.json` both report no regression.
+- Verdict median / p90 error is unchanged (0.0819 / 0.2214).
+
+## Rules changed (fairfare/parser.py and app/js/engine.js identical; verdict.py and engine.js `estimate` identical)
+
+**1. Never guess between two fares.**
+- **A card's fare line is "card-fare shaped".** Only punctuation, ride-type names or "Accept" may stand before *or after* the £ amount, or a leg on the same line. An amount followed by words ("£25.00 from Sam via PayPal", "£30 for the shopping", "£6.00 for every 3 trips") is a message, promo or notification, never a fare. This replaces word-hunting as the main rule.
+- **More rejection words** (backstop only): from, via, paypal, sent, earnings, on top of spent, paid, received, refund, wallet, earned, today and week.
+- **Add-ons are not fares.** An amount right after "+" ("+£5.00 airport fee") is skipped.
+- **Earnings pill.** A bare amount whose neighbouring non-blank line is a status label (online/offline, "Finding trips", earnings, today, this week) is not a candidate.
+- **The Accept button.**
+  - An amount on the same line as "Accept" is the card's own fare.
+  - If a *different* fare also sits just above the legs, the fare is None (`fare_ambiguous`).
+- **Conflict means None.** Otherwise the fare is the nearest card-fare-shaped amount above the legs. If any other plausible candidate with a different value exists anywhere on the screen, the fare is None (`fare_ambiguous`). Plausible means it passes the £20 + £6/mi + £1/min and £0.25/mi bounds.
+- **Unreadable card fare.** A money-shaped line with €, $, ¥, ¢, one or two letters, or no symbol at all, where the card's fare line should be, means the card's fare is unreadable (`fare_unreadable`). No other amount may stand in for it.
+  - With no symbol, values up to 5.00 are left alone, because that is a rider rating that lost its ★.
+- **Ambiguous trip, not ambiguous fare.** Multi-stop (an unlabelled leg between the pickup and the trip) now refuses only the trip. The fare and pickup are kept, since they aren't ambiguous.
+
+**2. Blank lines don't count.** The 4-line window above the legs counts **non-blank** lines only. Blank means only spaces, tabs, CR, FF or VT, the same character set in both engines. The garbled-fare check uses the same window.
+
+**3. Compact hours.** "1h20min", "1h 20m", "1hr20", "1 hr 20", "1h20 mins" and "80 min" all give 80 minutes, and "2h" gives 120. The hour unit now needs "not followed by a letter" instead of a word boundary.
+
+**4. Manual entry.**
+- `estimate()` returns UNKNOWN (`zero_minute_leg`) when any leg has 0 minutes and more than 0 miles, or any negative value.
+- 0 minutes with 0 miles (already at the rider) is still allowed.
+- Same rule in both engines, tested for parity.
+
+## Still wrong or refused, and why
+
+- **f16, Accept-button fare:** read as £10.20, the true fare. It only counts as "wrong" against QA's conservative expected value (None). The owner and QA should confirm this is the wanted policy.
+- **f11, "7 rnins (2.6 mi) away":** pickup refused, so manual entry. I didn't map "rn" to "m".
+  - The 60 original synthetic "garbled" cases use exactly "rnin" and expect the legs to be **null**.
+  - Mapping it would make those 60 fail, and spec.md says to keep them byte-identical.
+  - This is a question for the Orchestrator: either change that convention or accept the refusal.
+- **f18, "£ 12 .40":** refused (manual entry). Joining digits across a space is a guess I didn't want to make.
+- **f10, stop leg:** trip refused (correct). Fare and pickup are now read.
+- **Not refused:** very slow legs ("99999 mins") still give DECLINE. This is a known low-risk gap.
+- **Not done here:** manual entry still accepts an absurd fare such as £999 for 7 miles. The parser's plausibility bound isn't applied to typed values. That is a product decision for the builder and verdict-modeler.
+
+## Guesses about real layouts (new this attempt)
+
+- **"Card-fare-shaped line"**
+  - Assumes the real card's fare line carries no other words. A real badge after the fare ("£12.40 Fixed", "£12.40 incl. fees") gives None.
+  - The ride-type list is still a guess.
+- **The pill-label list** (online/offline/finding trips/earnings/today/this week) is English only.
+- **The Accept-button rule** assumes an amount on the Accept line is the offer's fare. If a real button carried a different number (for example a bonus), the result would be wrong. This is untested on real screenshots.
+- **The conflict rule** gives None whenever a second plausible bare amount is on screen. On real screens that could raise manual entry; pilot data will show.

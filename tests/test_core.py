@@ -107,3 +107,15 @@ def test_gate_blocks_and_holds(tmp_path, monkeypatch):
 def test_eval_runs_on_seed_set():
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "run_eval.py")], capture_output=True, text=True)
     assert r.returncode == 0 and "[synthetic] cases=" in r.stdout
+
+
+def test_manual_entry_zero_minute_leg_is_unknown():
+    # 12 miles in 0 minutes is a typing error, not £150/h (QA cycle 1, item 10).
+    v = estimate(manual_offer(fare=21, pickup_min=5, pickup_miles=2, trip_min=0, trip_miles=12))
+    assert v.decision == "UNKNOWN" and v.per_hour_mid is None
+    v = estimate(manual_offer(fare=21, pickup_min=0, pickup_miles=2, trip_min=20, trip_miles=12))
+    assert v.decision == "UNKNOWN"
+    v = estimate(manual_offer(fare=21, pickup_min=5, pickup_miles=-2, trip_min=20, trip_miles=12))
+    assert v.decision == "UNKNOWN"
+    # 0 minutes and 0 miles for the pickup (already at the rider) is fine.
+    assert estimate(manual_offer(fare=21, pickup_min=0, pickup_miles=0, trip_min=25, trip_miles=10)).decision != "UNKNOWN"

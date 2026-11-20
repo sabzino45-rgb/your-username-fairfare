@@ -48,24 +48,36 @@ const NOT_FARE = new RegExp(
   "\\b(?:off|discount|promo|code|voucher|coupon|save|saved|earned|today|week|weekly|" +
   "balance|cash ?out|tips?|bonus|quest|reward|refer|cashback|credit|wallet|extra|" +
   "surge|boost|includes?|included|incl|" +
-  "spent|spend|paid|pay|payment|received|bank|card|transfer|order|refund|bill)\\b", "i");
-// The fare is the prominent amount that starts its line; only ride-type names may come before it.
-const FARE_PREFIX_OK = new RegExp(
-  "^(?:[^A-Za-z0-9]|\\b(?:uber|uberx|comfort|exclusive|xl|exec|executive|green|pet|lux|" +
-  "black|electric|priority|saver|wav|access|assist)\\b)*$", "i");
+  "spent|spend|paid|pay|payment|received|bank|card|transfer|order|refund|bill|" +
+  "from|via|paypal|sent|earnings)\\b", "i");
+// A card's fare line holds the amount and nothing else that reads as words: only punctuation,
+// ride-type names or the Accept button may stand before or after it; a leg may follow on the line.
+const FARE_WORDS = "(?:[^A-Za-z0-9]|\\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|" +
+  "lux|black|electric|priority|saver|wav|access|assist|accept)\\b)*";
+const FARE_PREFIX_OK = new RegExp("^" + FARE_WORDS + "$", "i");
+const FARE_TRAIL_OK = FARE_PREFIX_OK;
+const ACCEPT = /\baccept\b/i;
+// A status label next to a bare amount marks the earnings pill ("£84.20" / "You're online").
+const PILL_LABEL = /\b(?:online|offline|finding trips|earnings|today|this week)\b/i;
 const RATE_AFTER = /[ \t]*(?:\/|per\b)/iy;                                   // "£1.14/mi"
 const RANGE_AFTER = new RegExp("[ \\t]*[-\\u2013\\u2014~][ \\t]*£[ \\t]?" + NUM, "y"); // "£10.80–£13.20"
-// A card fare whose £ was misread as a letter ("E11.10", "fl2.40"): the card's own fare is unreadable.
-const GARBLED_FARE_LINE = /^[^A-Za-z0-9£]*[A-Za-z]{1,2}[ \t]?[0-9OoIl]{1,3}[.,][0-9OoIl]{2}[^A-Za-z0-9£]*$/;
+// A card fare whose £ was misread ("E11.10", "€9.60", "$12.95") or dropped ("15.75"), alone on its line:
+// the card's own fare is unreadable. Without a symbol, values up to 5 are a rating that lost its star.
+const GARBLED_FARE_LINE = /^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})[^A-Za-z0-9£]*$/;
+function garbledFareLine(line) {
+  const g = GARBLED_FARE_LINE.exec(line);
+  return !!g && (g[1] !== undefined || f(ocrDigits(g[2])) > 5);
+}
 // Lines whose min/distance pair is navigation, not an offer leg.
 const NOT_LEG = /\b(?:arriv\w*|eta|remaining|destination|route|to go)\b/i;
-// The fare sits on the card just above the legs: at most this many lines above the first leg.
+// The fare sits on the card just above the legs: at most this many NON-BLANK lines above the first leg.
 const FARE_WINDOW_LINES = 4;
 // Fare plausibility against its legs (UK private hire, generous); see parser.py for the reasoning.
 const FARE_MAX_BASE = 20.0, FARE_MAX_PER_MILE = 6.0, FARE_MAX_PER_MIN = 1.0, FARE_MIN_PER_MILE = 0.25;
 const SURGE = new RegExp("\\+\\s?£\\s?" + NUM + "[^\\n]*?(?:surge|boost|included)", "i");
 // [ \t] not \s: a label must be on the same line, or "Trip" on the next line is stolen.
-const LEG_SRC = "(?:([0-9]+)[ \\t]*(?:hours?|hrs?|h)\\b[ \\t]*(?:([0-9]+)[ \\t]*(?:mins?|minutes?))?|" +
+// Hours: "1 hr 20 mins", "1h20min", "1h 20m", "1hr20", "2 hrs".
+const LEG_SRC = "(?:([0-9]+)[ \\t]*(?:hours?|hrs?|h)(?![A-Za-z])[ \\t]*(?:([0-9]+)[ \\t]*(?:minutes?|mins?|m)?(?![A-Za-z]))?|" +
   NUM + "[ \\t]*(?:mins?|minutes?))" +
   "[ \\t]*[(\\[·•,-]?[ \\t]*" + NUM + "[ \\t]*(mi|miles?|km)\\b\\)?[ \\t]*(away|trip|pickup)?";
 const RATING = new RegExp(NUM + "\\s*[★*]");
@@ -82,7 +94,27 @@ function makeLines(text) {
     return lo - 1;
   };
   const line = (n) => text.slice(starts[n], n + 1 < starts.length ? starts[n + 1] - 1 : text.length);
-  return { starts, no, line };
+  // nb[n]: how many non-blank lines come before line n; nonblank: indices of non-blank lines.
+  const nb = [], nonblank = [];
+  for (let n = 0; n < starts.length; n++) {
+    nb.push(nonblank.length);
+    if (!/^[ \t\r\f\v]*$/.test(line(n))) nonblank.push(n);
+  }
+  const neighbours = (n) => { // the non-blank lines just before and just after line n
+    const k = nb[n], out = [];
+    if (k > 0) out.push(line(nonblank[k - 1]));
+    const j = k < nonblank.length && nonblank[k] === n ? k + 1 : k;
+    if (j < nonblank.length) out.push(line(nonblank[j]));
+    return out;
+  };
+  return { starts, no, line, nb, neighbours };
+}
+
+function plausible(value, legs) {
+  const miles = legs.reduce((a, l) => a + l[2], 0), mins = legs.reduce((a, l) => a + l[1], 0);
+  if (miles <= 0) return true;
+  const top = FARE_MAX_BASE + FARE_MAX_PER_MILE * miles + FARE_MAX_PER_MIN * mins;
+  return FARE_MIN_PER_MILE * miles <= value && value <= top;
 }
 
 export function emptyOffer(source = "scan") {
@@ -130,10 +162,17 @@ export function parseOfferText(text) {
   if (pickups.length > 1 || trips.length > 1) return refuseAll(o, "multiple_offers");
   if (pickups.length && trips.length) {
     const [lo, hi] = [pickups[0][3], trips[0][3]].sort((a, b) => a - b);
-    if (unl.some((l) => lo < l[3] && l[3] < hi)) return refuseAll(o, "extra_leg"); // e.g. multi-stop
-    if (unl.length) o.warnings.push("unlabelled_leg_ignored"); // outside the card (navigation, etc.)
+    const inside = unl.filter((l) => lo < l[3] && l[3] < hi);
+    if (unl.length > inside.length) o.warnings.push("unlabelled_leg_ignored"); // outside the card (navigation, etc.)
     unl = [];
-    used = [pickups[0], trips[0]];
+    if (inside.length) {
+      // A stop leg between pickup and trip (multi-stop): the trip total is unclear, the pickup isn't.
+      o.warnings.push("extra_leg");
+      trips.length = 0;
+      used = [pickups[0]];
+    } else {
+      used = [pickups[0], trips[0]];
+    }
   } else if (legs.length > 2) {
     // Several offers on one screen (e.g. a Trip Radar list): can't tell which one is meant.
     return refuseAll(o, "multiple_offers");
@@ -141,41 +180,64 @@ export function parseOfferText(text) {
     used = legs;
   }
 
-  // Fare candidates: prominent £ amounts that start their line, not surge, rate, promo or notification.
-  const fares = []; // [position, line number, value]
+  // Fare candidates: £ amounts on a card-fare-shaped line (see FARE_WORDS); not the surge,
+  // an add-on ("+£5.00 airport fee"), a rate, a promo/payment/earnings line or the earnings pill.
+  const fares = []; // [position, non-blank line number, value, on the Accept line]
+  let rangeSeen = false;
   const fareRe = new RegExp(FARE_SRC, "g");
   while ((m = fareRe.exec(text))) {
     if (sm && sm.index <= m.index && m.index < sm.index + sm[0].length) continue;
     if (!hasDigit(m[1])) continue;
     const n = L.no(m.index);
     const line = L.line(n);
-    if (NOT_FARE.test(line) || !FARE_PREFIX_OK.test(line.slice(0, m.index - L.starts[n]))) continue;
-    const end = m.index + m[0].length;
+    const lineEnd = L.starts[n] + line.length;
+    const prefix = line.slice(0, m.index - L.starts[n]);
+    if (NOT_FARE.test(line) || !FARE_PREFIX_OK.test(prefix) || prefix.trimEnd().endsWith("+")) continue;
+    let end = m.index + m[0].length;
     if (matchAt(RATE_AFTER, text, end)) continue;
     let value = f(ocrDigits(m[1]));
     const rng = matchAt(RANGE_AFTER, text, end);
-    if (rng) { value = Math.min(value, f(rng[1])); o.warnings.push("fare_range_low_end"); } // lower end
-    fares.push([m.index, n, value]);
+    if (rng) { value = Math.min(value, f(rng[1])); end = rng.index + rng[0].length; } // lower, guaranteed end
+    const legOnLine = legs.find((l) => end <= l[3] && l[3] < lineEnd);
+    if (!FARE_TRAIL_OK.test(text.slice(end, legOnLine ? legOnLine[3] : lineEnd))) continue;
+    if (L.neighbours(n).some((x) => PILL_LABEL.test(x))) continue;
+    rangeSeen = rangeSeen || !!rng;
+    fares.push([m.index, L.nb[n], value, ACCEPT.test(line)]);
   }
 
   if (used.length) {
     const first = Math.min(...used.map((l) => l[3])), last = Math.max(...used.map((l) => l[3]));
     if (fares.some((c) => first < c[0] && c[0] < last)) return refuseAll(o, "multiple_offers"); // stacked offers
-    const anchorLine = L.no(first);
-    const near = fares.filter((c) => c[0] < first && anchorLine - c[1] <= FARE_WINDOW_LINES);
-    const startLine = near.length ? near[near.length - 1][1] + 1 : Math.max(0, anchorLine - FARE_WINDOW_LINES);
+    const anchorLine = L.no(first), anchorNb = L.nb[anchorLine];
+    const plaus = fares.filter((c) => plausible(c[2], used));
+    const onAccept = new Set(plaus.filter((c) => c[3]).map((c) => c[2]));
+    const near = fares.filter((c) => c[0] < first && anchorNb - c[1] <= FARE_WINDOW_LINES);
+    const after = near.length ? near[near.length - 1][0] : -1;
     let garbled = false;
-    for (let n = startLine; n < anchorLine; n++) {
-      const ln = L.line(n);
-      if (GARBLED_FARE_LINE.test(ln) && hasDigit(ln)) garbled = true;
+    for (let n = 0; n < anchorLine; n++)
+      if (L.starts[n] > after && anchorNb - L.nb[n] <= FARE_WINDOW_LINES && garbledFareLine(L.line(n))) garbled = true;
+    if (onAccept.size) {
+      // The amount on the Accept button is the card's own fare; a different fare above the legs too: refuse.
+      const v = [...onAccept][0];
+      if (onAccept.size === 1 && !(near.length && near[near.length - 1][2] !== v)) o.fare = v;
+      else o.warnings.push("fare_ambiguous");
+    } else if (garbled) {
+      o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
+    } else if (near.length) {
+      const pick = near[near.length - 1];
+      // Another plausible fare elsewhere on the screen: never guess between them.
+      if (plaus.some((c) => c !== pick && c[2] !== pick[2])) o.warnings.push("fare_ambiguous");
+      else o.fare = pick[2];
+    } else if (fares.length) {
+      o.warnings.push("fare_not_near_legs");
     }
-    if (garbled) o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
-    else if (near.length) o.fare = near[near.length - 1][2];
-    else if (fares.length) o.warnings.push("fare_not_near_legs");
   } else if (fares.length) {
-    if (new Set(fares.map((c) => c[2])).size === 1) o.fare = fares[0][2];
+    let values = new Set(fares.filter((c) => c[3]).map((c) => c[2]));
+    if (!values.size) values = new Set(fares.map((c) => c[2]));
+    if (values.size === 1) o.fare = [...values][0];
     else o.warnings.push("fare_ambiguous");
   }
+  if (rangeSeen && o.fare !== null) o.warnings.push("fare_range_low_end");
 
   let pickup = pickups[0] || null;
   let trip = trips[0] || null;
@@ -254,6 +316,11 @@ export function estimate(offer, settings = DEFAULT_SETTINGS) {
     o.missing = REQUIRED.filter((k) => o[k] === null);
   }
   if (o.missing.length) return { decision: "UNKNOWN", confidence: "low", reasons: ["missing"], missing: o.missing };
+  // A leg that covers miles in no time (or any negative value) is a typing or reading error,
+  // not a sky-high £/h. Same rule in fairfare/verdict.py estimate().
+  for (const [mins, miles] of [[o.pickup_min, o.pickup_miles], [o.trip_min, o.trip_miles]])
+    if (mins < 0 || miles < 0 || (mins <= 0 && miles > 0))
+      return { decision: "UNKNOWN", confidence: "low", reasons: ["zero_minute_leg"], missing: [] };
   if (o.pickup_miles + o.trip_miles <= 0 || o.pickup_min + o.trip_min <= 0)
     return { decision: "UNKNOWN", confidence: "low", reasons: ["zero"], missing: [] };
 

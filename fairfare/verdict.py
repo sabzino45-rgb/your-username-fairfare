@@ -78,6 +78,12 @@ def estimate(offer: Offer, profile: DriverProfile | None = None) -> Verdict:
         return Verdict("UNKNOWN", None, None, None, None, None, None, "low",
                        [f"missing:{','.join(offer.missing)}"])
 
+    # A leg that covers miles in no time (or any negative value) is a typing or reading error,
+    # not a sky-high £/h. Same rule in app/js/engine.js estimate().
+    for mins, miles in ((offer.pickup_min, offer.pickup_miles), (offer.trip_min, offer.trip_miles)):
+        if mins < 0 or miles < 0 or (mins <= 0 and miles > 0):
+            return Verdict("UNKNOWN", None, None, None, None, None, None, "low", ["zero_minute_leg"])
+
     total_miles = offer.pickup_miles + offer.trip_miles
     total_min = offer.pickup_min + offer.trip_min
     if total_miles <= 0 or total_min <= 0:
