@@ -1,4 +1,4 @@
-STATUS: BLOCK
+STATUS: PASS
 
 # Cycle 1 privacy and compliance review
 
@@ -90,3 +90,11 @@ Appended to reports/cycle-1/human_gates.md (the existing pilot-contact, share-to
 ## Summary
 
 STATUS: BLOCK, on one finding from before this cycle: Google Fonts sends every driver's IP address to Google on each load, and the app doesn't need it. Fix: self-host fonts or use system fonts. This cycle's flows are fine. Shared, pasted and dropped screenshots are read on the phone, the image and OCR text never leave it, the share cache is deleted after reading, and only numbers are saved. Tesseract loads from jsDelivr with no integrity check, so self-hosting is recommended. eval_set/ is all synthetic, but redact.py misses names in notification previews. Fix that before any pilot data. Retention, a privacy notice, the DPIA, the lawful basis and Uber's terms go to humans. Advice only, not legal clearance.
+
+## Re-review (2026-11-20)
+
+I checked the Builder's fix for the blocking finding myself, without relying on build.md.
+- `grep` of app/ (html, js, css, manifest; lang/ skipped): no `googleapis` or `gstatic`, and no `@import` or `url(` in styles.css. The only external host referenced anywhere is `https://cdn.jsdelivr.net`, in app/js/app.js:219 (the Tesseract loader, which runs only when a screenshot is scanned). sw.js cache is `fairfare-v3`.
+- I wrote my own Playwright script (Chromium headless) against `python3 -m http.server 8770` serving app/, and stopped the server afterwards. It loaded #check and ran the DEMO offer, then visited #demand, #history, #rates, #feedback and #owner, back to #check, then reloaded the page. **43 requests, every one to localhost:8770. All were GET.** No request went to Google Fonts or any other outside host. Script: /tmp/claude-0/-home-user/822f3609-d26f-5d56-bc0b-4c5c4ba5b5fd/scratchpad/rereview/pw.js.
+- The blocking finding (flow 5, R0) is resolved, so data minimisation is now met apart from the recommendations. **Status changed to PASS.** jsDelivr (only on scan), GitHub Pages hosting, and recommendations R1 to R7 still stand, as do the human gates. Advice only, not legal clearance.
+
