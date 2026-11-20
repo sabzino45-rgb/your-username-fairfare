@@ -11,7 +11,7 @@
     "cases": []
   },
   "synthetic": {
-    "n_cases": 80,
+    "n_cases": 92,
     "scan_accuracy": {
       "fare": 1.0,
       "pickup_min": 1.0,
@@ -20,7 +20,7 @@
       "trip_miles": 1.0
     },
     "scan_accuracy_overall": 1.0,
-    "manual_fallback_rate": 0.175,
+    "manual_fallback_rate": 0.2065,
     "verdict_n_scored": 51,
     "verdict_median_error": 0.0819,
     "verdict_p90_error": 0.2214,
@@ -725,6 +725,92 @@
         "missing": [
           "fare"
         ]
+      },
+      {
+        "id": "syn-qa-u01_pill_garbled_fare",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ]
+      },
+      {
+        "id": "syn-qa-u02_msg_garbled_fare",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ]
+      },
+      {
+        "id": "syn-qa-u03_fare_decimal_lost",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ]
+      },
+      {
+        "id": "syn-qa-u04_hour_trip",
+        "decision": "DECLINE",
+        "confidence": "high",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u05_l_for_1_in_leg",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u06_amazon_parcel_pill",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u07_spanish_ui",
+        "decision": "MARGINAL",
+        "confidence": "medium",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u08_fare_range",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u09_bank_notification_near",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ]
+      },
+      {
+        "id": "syn-qa-u10_ride_with_price_per_mile",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": []
+      },
+      {
+        "id": "syn-qa-u11_two_card_stacked_one_leg_each",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare",
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ]
+      },
+      {
+        "id": "syn-qa-u12_nav_with_min_mi_no_kw",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": []
       }
     ]
   },
