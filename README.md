@@ -6,6 +6,8 @@ A ride-offer analyzer and South West demand guide for ride-hail drivers, in 26 l
 
 **The app:** https://sabzino45-rgb.github.io/your-username-fairfare/ (folder `app/`).
 
+**The agent office:** https://claude.ai/artifact/6UKYXsG6JX1tWVexKTASUq (private to the owner; source in `office/`).
+
 ## Quick start
 
 ```bash

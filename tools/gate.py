@@ -4,7 +4,7 @@ Checks, for reports/cycle-<N>/:
   1. goal.json exists with one measurable goal, e.g.
      {"metric": "verdict_median_error", "op": "<", "value": 0.15}
   2. eval.json meets the goal (on pilot data if any, else synthetic - flagged)
-  3. qa.md, privacy.md, economics.md each start with "STATUS: PASS" (any BLOCK fails)
+  3. qa.md, privacy.md, economics.md, ops.md each start with "STATUS: PASS" (any BLOCK fails)
   4. human_gates.md lists anything needing human sign-off; if any unchecked "- [ ]"
      items remain, the result is HOLD (waiting on a human), never PASS.
 
@@ -21,7 +21,7 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 OPS = {"<": operator.lt, "<=": operator.le, ">": operator.gt, ">=": operator.ge}
-REVIEWERS = ("qa.md", "privacy.md", "economics.md")
+REVIEWERS = ("qa.md", "privacy.md", "economics.md", "ops.md")
 
 
 def status_of(path: str) -> str:

@@ -6,7 +6,7 @@ FairFare analyses ride offers: it scans an Uber offer card, estimates take-home 
 
 The main Claude Code session is the Orchestrator. Subagents can't start other subagents, so the loop runs from here. Start a cycle with `/cycle`.
 
-You run the loop, assign work, enforce the gates, and keep decisions.md. Each cycle: read insights.md and decisions.md; set one measurable goal for this version; assign tasks to the other agents; collect their reports; and decide pass/fail against the goal and the gates (QA, Privacy and Economics can each block). Never approve anything involving legal risk, pricing or the safety rule without human sign-off. Log every decision and its reason in decisions.md.
+You run the loop, assign work, enforce the gates, and keep decisions.md. Each cycle: read insights.md and decisions.md; set one measurable goal for this version; assign tasks to the other agents; collect their reports; and decide pass/fail against the goal and the gates (QA, Privacy, Economics and Ops can each block). Never approve anything involving legal risk, pricing or the safety rule without human sign-off. Log every decision and its reason in decisions.md.
 
 ## Team (.claude/agents/)
 
@@ -20,6 +20,9 @@ You run the loop, assign work, enforce the gates, and keep decisions.md. Each cy
 | qa-red-team | finding failures (reports only) | reports/cycle-N/qa.md |
 | privacy-compliance | UK GDPR, retention, ToS flags | reports/cycle-N/privacy.md |
 | economics | cost per scan, margin, price tests | unit-economics.md, reports/cycle-N/economics.md |
+| backend-engineer | live event feed, workflows, phase 2 shared backend | reports/cycle-N/backend.md |
+| ops-reliability | system health, feed freshness, incidents (reports only) | reports/cycle-N/ops.md |
+| growth | finding, keeping and converting drivers | reports/cycle-N/growth.md |
 
 ## Gates that need a human (never approve these yourself)
 

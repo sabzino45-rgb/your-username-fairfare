@@ -1,0 +1,358 @@
+<title>FairFare Agent Office</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an architect's floor plan of the agent team (rooms = departments, desks = agents),
+   with a detail panel for the selected desk and the team's response log beside it. */
+:root {
+  --paper: #eef2f4; --sheet: #fbfcfc; --ink: #15212b; --muted: #5b6a75; --line: #c3ced6; --grid: #dfe6eb;
+  --accent: #1d8a55;
+  --command: #15212b; --discovery: #2f63a3; --engineering: #9a5b12; --review: #a3304f; --you: #1d8a55;
+  --idle: #8c9aa4; --working: #c98a00; --done: #1d8a55; --blocked: #c0392b;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
+    --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
+    --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
+  --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
+  --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body); margin: 0;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.label { font: 500 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.02 var(--display); margin: 6px 0 0; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font: 700 19px/1.2 var(--display); margin: 0; }
+h3 { font: 600 15px/1.3 var(--body); margin: 0; }
+.lede { color: var(--muted); max-width: 62ch; margin: 6px 0 0; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat { background: var(--sheet); border: 1px solid var(--line); padding: 8px 12px; min-width: 104px; }
+.stat b { display: block; font: 500 22px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.stat span { font: 400 11px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+/* Floor plan */
+.plan { background: var(--sheet); border: 2px solid var(--ink); padding: 14px; display: grid; gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-areas:
+  "cmd cmd you you you you" "disc disc disc eng eng eng" "rev rev rev rev rev rev"; position: relative; }
+@media (max-width: 620px) { .plan { grid-template-columns: 1fr; grid-template-areas: "cmd" "you" "disc" "eng" "rev"; } }
+.room { border: 1.5px dashed var(--line); padding: 10px 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.room::before { content: ""; position: absolute; left: -2px; top: 18px; width: 4px; height: 26px; background: var(--sheet); } /* door gap */
+.room .rname { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.room .rname .label { color: var(--rc); }
+.room .step { font: 500 11px var(--mono); color: var(--muted); }
+.desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.desk { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 9px; border: 1px solid var(--line);
+  background: var(--paper); position: relative; min-width: 0; }
+.desk:hover { border-color: var(--rc); }
+.desk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.desk[aria-pressed="true"] { border: 2px solid var(--rc); padding: 8px; background: var(--sheet); }
+.desk .top { display: flex; align-items: center; gap: 8px; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font: 700 12px var(--display); color: var(--sheet); background: var(--rc); }
+.desk .nm { font: 600 13px/1.2 var(--body); overflow-wrap: break-word; hyphens: auto; min-width: 0; }
+.desk .st { display: flex; align-items: center; gap: 6px; font: 400 11px var(--mono); color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
+.dot[data-s="working"] { background: var(--working); box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 25%, transparent); }
+.dot[data-s="done"] { background: var(--done); }
+.dot[data-s="blocked"] { background: var(--blocked); }
+.badge { font: 500 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; padding: 1px 5px; color: var(--review); align-self: flex-start; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font: 400 12px var(--mono); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Panels */
+.panel { background: var(--sheet); border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel.sel { border-top: 4px solid var(--rc); }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; font-size: 14px; margin: 0; }
+.kv dt { font: 500 11px/1.9 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+code { font: 13px var(--mono); background: var(--paper); padding: 1px 4px; }
+.feed { display: flex; flex-direction: column; gap: 8px; }
+.resp { border-left: 3px solid var(--rc, var(--line)); padding: 6px 0 6px 10px; }
+.resp .meta { font: 400 11px var(--mono); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.resp p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { font: 600 13px var(--body); border: 1px solid var(--ink); background: var(--ink); color: var(--sheet); padding: 8px 12px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+select, textarea { font: 14px var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); padding: 8px 10px; width: 100%; }
+textarea { min-height: 80px; resize: vertical; }
+label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.gate { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
+.gate:first-child { border-top: 0; }
+.gate input { margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.gate.done .t { text-decoration: line-through; color: var(--muted); }
+.gate .d { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tabs button { font: 500 12px var(--mono); border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 8px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="label">FairFare · Agent office · South West</div>
+      <h1>Who's working on FairFare</h1>
+      <p class="lede">Twelve AI agents run the improvement loop, plus you at the human desk. Pick a desk to see the agent's job, what it reads and writes, and everything it has reported.</p>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="layout">
+    <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+      <div class="plan" id="plan" aria-label="Office floor plan"></div>
+      <div class="legend">
+        <span><i class="dot" data-s="idle"></i>Idle</span><span><i class="dot" data-s="working"></i>Working</span>
+        <span><i class="dot" data-s="done"></i>Reported</span><span><i class="dot" data-s="blocked"></i>Blocking</span>
+        <span><i class="badge">Can block</i>can stop a release</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <section class="panel sel" id="detail" aria-live="polite"></section>
+      <section class="panel" id="gates-panel">
+        <div><h2>Waiting on you</h2><p class="note">Things only you can do. The agents can't move past these.</p></div>
+        <div id="gates"><p class="empty">Loading…</p></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="layout">
+    <section class="panel">
+      <div class="row" style="justify-content:space-between"><h2>Team responses</h2><div class="tabs" id="filter"></div></div>
+      <div class="feed" id="feed"><p class="empty">Loading the team's reports…</p></div>
+    </section>
+    <section class="panel">
+      <div><h2>Leave a note for the team</h2><p class="note">The Orchestrator reads these at the start of the next cycle and hands each one to the right agent.</p></div>
+      <form id="note-form" class="row" style="flex-direction:column;align-items:stretch">
+        <label class="f" for="note-to">To<select id="note-to"></select></label>
+        <label class="f" for="note-text">Note<textarea id="note-text" maxlength="2000" required placeholder="For example: drivers in Plymouth say the ferry port is busiest on Sunday nights."></textarea></label>
+        <div class="row"><button class="btn" type="submit" id="note-send">Send note</button><span class="note" id="note-msg"></span></div>
+      </form>
+      <div class="feed" id="notes"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+// ---------- the team (mirrors .claude/agents/ in the repository) ----------
+const ROOMS = [
+  { id: "cmd", name: "Command", color: "--command", step: "Runs every step" },
+  { id: "you", name: "Human desk", color: "--you", step: "Signs off" },
+  { id: "disc", name: "Discovery", color: "--discovery", step: "Steps 1–2" },
+  { id: "eng", name: "Engineering", color: "--engineering", step: "Step 3" },
+  { id: "rev", name: "Review gate", color: "--review", step: "Step 4" },
+];
+const AGENTS = [
+  { id: "orchestrator", name: "Orchestrator", room: "cmd", ini: "OR",
+    role: "Runs the loop. Sets one measurable goal per cycle, assigns work, collects reports and decides pass or fail.",
+    owns: "The cycle and the decision log", reads: "insights.md, decisions.md, every agent's report", writes: "decisions.md, reports/cycle-N/",
+    block: false, gates: "Never approves legal, pricing, safety or shipping. Those go to you." },
+  { id: "you", name: "You (owner)", room: "you", ini: "YOU",
+    role: "Approves what agents may not: legal and Uber terms questions, pricing, shipping to drivers, and any change to the safety rule.",
+    owns: "Final sign-off", reads: "Waiting on you list, cycle summaries", writes: "Ticks in human_gates.md, notes to the team", block: true, gates: "Your word is final." },
+  { id: "research", name: "Research", room: "disc", ini: "RE",
+    role: "Turns driver interviews, pilot feedback, competitor apps and Uber screen changes into evidence.",
+    owns: "Evidence", reads: "research/, eval_set/ pilot cases, public sources", writes: "insights.md", block: false, gates: "Never invents quotes or numbers." },
+  { id: "product-spec", name: "Product / Spec", room: "disc", ini: "PS",
+    role: "Turns insights into a short prioritised spec with one measurable goal. Owns hands-free and safety design.",
+    owns: "Scope, goal, safety design", reads: "insights.md, decisions.md, SAFETY.md", writes: "spec.md, goal.json", block: false, gates: "Can't edit the safety rule." },
+  { id: "growth", name: "Growth", room: "disc", ini: "GR",
+    role: "Finds drivers, keeps them coming back and tests whether they'll pay, using real numbers only.",
+    owns: "Funnel: reached → tried → returned → paid", reads: "Owner view exports, feedback, unit-economics.md", writes: "reports/cycle-N/growth.md", block: false, gates: "Pricing and public posts go to you." },
+  { id: "scan-engineer", name: "Scan Engineer", room: "eng", ini: "SE",
+    role: "Builds the screenshot reader and its manual-entry fallback. Numbers only, never rider names or addresses.",
+    owns: "fairfare/parser.py", reads: "eval_set/, failing scans", writes: "Parser code, scan accuracy report", block: false, gates: "A wrong number is worse than a missing one." },
+  { id: "verdict-modeler", name: "Verdict Modeler", room: "eng", ini: "VM",
+    role: "Estimates take-home per hour and per mile as a range with confidence, calibrated on real trips.",
+    owns: "fairfare/verdict.py", reads: "Logged trip outcomes", writes: "Median and 90th-percentile error report", block: false, gates: "Flags any change that makes error worse." },
+  { id: "builder", name: "Builder", room: "eng", ini: "BU",
+    role: "Builds app features from the spec: screens, text, storage, the 26 languages.",
+    owns: "The app (app/)", reads: "spec.md, SAFETY.md", writes: "Code on a cycle branch", block: false, gates: "Never ships. A human publishes." },
+  { id: "backend-engineer", name: "Backend Engineer", room: "eng", ini: "BE",
+    role: "Runs the live event feed and the automated pipeline, and builds the shared backend for phase 2.",
+    owns: "fetch_events.py, workflows, store.js", reads: "Provider docs, ops reports", writes: "reports/cycle-N/backend.md", block: false, gates: "Official APIs only. Secrets never in code." },
+  { id: "qa-red-team", name: "QA / Red Team", room: "rev", ini: "QA",
+    role: "Tries to break FairFare: blurred screenshots, odd layouts, extreme offers, anything needing phone use while driving.",
+    owns: "Finding failures", reads: "The whole app", writes: "reports/cycle-N/qa.md", block: true, gates: "Reports, never fixes." },
+  { id: "privacy-compliance", name: "Privacy", room: "rev", ini: "PR",
+    role: "Checks every data flow against UK GDPR, retention and redaction, and flags Uber terms risk.",
+    owns: "Personal data", reads: "Code, eval_set/, data flows", writes: "reports/cycle-N/privacy.md", block: true, gates: "Advises. A human or solicitor decides." },
+  { id: "economics", name: "Economics", room: "rev", ini: "EC",
+    role: "Tracks cost per scan, margin per driver and price-test results.",
+    owns: "unit-economics.md", reads: "economics.json, real price tests", writes: "reports/cycle-N/economics.md", block: true, gates: "Never changes the price." },
+  { id: "ops-reliability", name: "Ops & Reliability", room: "rev", ini: "OP",
+    role: "Checks the system is healthy: pipeline runs, published app, event feed freshness, errors. Writes incident notes.",
+    owns: "Service health", reads: "GitHub Actions runs, live site, events.json", writes: "reports/cycle-N/ops.md", block: true, gates: "Reports only. A feed over 24 hours old blocks." },
+];
+const byId = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+const roomOf = (a) => ROOMS.find((r) => r.id === a.room);
+
+// ---------- state ----------
+let selected = "orchestrator";
+let filter = "all";
+let status = {};      // agentId -> {state, task, updated}
+let responses = [];   // [{agent, at, kind, title, body, cycle}]
+let gates = [];       // [{id, title, detail, state}]
+let notes = [];
+let db = null, user = null, canWrite = false;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const when = (iso) => { try { return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+const stateOf = (id) => id === "you" ? (gates.some((g) => g.state !== "done") ? "working" : "done") : ((status[id] && status[id].state) || "idle");
+const wordOf = (id) => id === "you" ? (gates.some((g) => g.state !== "done") ? "Action needed" : "All clear") : STATE_WORD[stateOf(id)];
+const STATE_WORD = { idle: "Idle", working: "Working", done: "Reported", blocked: "Blocking" };
+
+// ---------- render ----------
+function renderPlan() {
+  $("#plan").innerHTML = ROOMS.map((r) => `
+    <div class="room" style="grid-area:${r.id};--rc:var(${r.color})">
+      <div class="rname"><span class="label">${esc(r.name)}</span><span class="step">${esc(r.step)}</span></div>
+      <div class="desks">${AGENTS.filter((a) => a.room === r.id).map((a) => `
+        <button class="desk" data-id="${a.id}" aria-pressed="${a.id === selected}" style="--rc:var(${r.color})">
+          <span class="top"><span class="avatar">${esc(a.ini)}</span><span class="nm">${esc(a.name)}</span></span>
+          <span class="st"><i class="dot" data-s="${stateOf(a.id)}"></i>${esc(wordOf(a.id))}</span>
+          ${a.block && a.id !== "you" ? `<span class="badge">Can block</span>` : ""}
+        </button>`).join("")}</div>
+    </div>`).join("");
+  document.querySelectorAll(".desk").forEach((b) => b.addEventListener("click", () => { selected = b.dataset.id; filter = selected; renderAll(); }));
+}
+
+function renderDetail() {
+  const a = byId[selected];
+  const r = roomOf(a);
+  const s = status[a.id] || {};
+  const mine = responses.filter((x) => x.agent === a.id);
+  const el = $("#detail");
+  el.style.setProperty("--rc", `var(${r.color})`);
+  el.innerHTML = `
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><span class="avatar">${esc(a.ini)}</span><div><div class="label">${esc(r.name)}</div><h2>${esc(a.name)}</h2></div></div>
+      <span class="st label" style="display:flex;gap:6px;align-items:center"><i class="dot" data-s="${stateOf(a.id)}"></i>${esc(wordOf(a.id))}</span>
+    </div>
+    <p style="margin:0">${esc(a.role)}</p>
+    <dl class="kv">
+      <dt>Owns</dt><dd>${esc(a.owns)}</dd>
+      <dt>Reads</dt><dd>${esc(a.reads)}</dd>
+      <dt>Writes</dt><dd>${esc(a.writes)}</dd>
+      <dt>Limits</dt><dd>${esc(a.gates)}</dd>
+      <dt>Blocks?</dt><dd>${a.block ? "Yes, its report can stop a release." : "No, it advises the Orchestrator."}</dd>
+      <dt>Now</dt><dd>${esc(s.task || "Waiting for the next cycle.")}${s.updated ? ` <span class="note">· ${esc(when(s.updated))}</span>` : ""}</dd>
+    </dl>
+    <div><h3>Latest response</h3>${mine.length ? respHtml(mine[0]) : `<p class="empty">No report yet. It reports when it runs in a cycle.</p>`}</div>`;
+}
+
+function respHtml(x) {
+  const a = byId[x.agent] || { name: x.agent };
+  const r = byId[x.agent] ? roomOf(byId[x.agent]) : null;
+  return `<div class="resp" style="--rc:var(${r ? r.color : "--line"})">
+    <div class="meta"><b>${esc(a.name)}</b><span>${esc(x.kind || "report")}</span>${x.cycle !== undefined ? `<span>cycle ${esc(x.cycle)}</span>` : ""}<span>${esc(when(x.at))}</span></div>
+    <h3 style="margin-top:2px">${esc(x.title)}</h3><p>${esc(x.body)}</p></div>`;
+}
+
+function renderFeed() {
+  const opts = [["all", "All"], ...AGENTS.filter((a) => responses.some((x) => x.agent === a.id)).map((a) => [a.id, a.name])];
+  if (!opts.some((o) => o[0] === filter)) opts.push([filter, byId[filter] ? byId[filter].name : filter]);
+  $("#filter").innerHTML = opts.map(([id, n]) => `<button data-f="${id}" aria-pressed="${filter === id}">${esc(n)}</button>`).join("");
+  document.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => { filter = b.dataset.f; renderFeed(); }));
+  const list = filter === "all" ? responses : responses.filter((x) => x.agent === filter);
+  $("#feed").innerHTML = list.length ? list.map(respHtml).join("") : `<p class="empty">${db ? "No responses from this agent yet." : "Team responses appear here once the page can reach its data."}</p>`;
+}
+
+function renderGates() {
+  const open = gates.filter((g) => g.state !== "done");
+  $("#gates").innerHTML = gates.length ? gates.map((g) => `
+    <div class="gate ${g.state === "done" ? "done" : ""}">
+      <input type="checkbox" id="g-${esc(g.id)}" data-gate="${esc(g.id)}" ${g.state === "done" ? "checked" : ""} ${canWrite ? "" : "disabled"} aria-label="Mark done">
+      <div><div class="t">${esc(g.title)}</div><div class="d">${esc(g.detail || "")}</div></div>
+    </div>`).join("") : `<p class="empty">Nothing waiting on you.</p>`;
+  document.querySelectorAll("[data-gate]").forEach((c) => c.addEventListener("change", async () => {
+    c.disabled = true;
+    try { await db.doc("gates/" + c.dataset.gate).update({ state: c.checked ? "done" : "open", changed: new Date().toISOString() }); }
+    catch { c.checked = !c.checked; }
+    c.disabled = !canWrite;
+  }));
+  return open.length;
+}
+
+function renderNotes() {
+  $("#notes").innerHTML = notes.length ? notes.map((n) => `<div class="resp" style="--rc:var(--you)">
+    <div class="meta"><b>You → ${esc(n.to === "all" ? "Whole team" : (byId[n.to] || {}).name || n.to)}</b><span>${esc(when(n.at))}</span><span>${esc(n.state === "picked-up" ? "Picked up" : "Waiting for next cycle")}</span></div>
+    <p>${esc(n.text)}</p></div>`).join("") : `<p class="empty">No notes yet.</p>`;
+}
+
+function renderStats() {
+  const cycles = Math.max(0, ...responses.map((x) => Number(x.cycle) || 0));
+  const openGates = gates.filter((g) => g.state !== "done").length;
+  const working = AGENTS.filter((a) => stateOf(a.id) === "working").length;
+  $("#stats").innerHTML = [
+    [AGENTS.length - 1, "agents"], [cycles, "cycles run"], [working, "working now"], [openGates, "waiting on you"],
+  ].map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
+}
+
+function renderAll() { renderPlan(); renderDetail(); renderFeed(); renderGates(); renderNotes(); renderStats(); }
+
+$("#note-to").innerHTML = `<option value="all">Whole team (Orchestrator decides)</option>` +
+  AGENTS.filter((a) => a.id !== "you").map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+renderAll();
+
+// ---------- live data ----------
+(async function connect() {
+  const timer = setTimeout(() => {
+    if (!responses.length) $("#feed").innerHTML = `<p class="empty">The team's reports can't be reached right now. The roles above are still current.</p>`;
+  }, 10000);
+  try { [db, user] = await Promise.all([claude.use("db"), claude.use("user")]); } catch { db = null; }
+  if (!db) {
+    clearTimeout(timer);
+    $("#note-send").disabled = true;
+    $("#note-msg").textContent = "Sign in to claude.ai to see reports and send notes.";
+    renderAll();
+    return;
+  }
+  canWrite = user ? (user.canEdit() || user.isOwner()) : true;
+  if (!canWrite) { $("#note-send").disabled = true; $("#note-msg").textContent = "Only the owner can send notes."; }
+  const stop = () => clearTimeout(timer);
+  db.collection("status").onSnapshot((s) => { stop(); status = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); renderPlan(); renderDetail(); renderStats(); }, stop);
+  db.collection("responses").orderBy("at", "desc").limit(200).onSnapshot((s) => { stop(); responses = s.docs.map((d) => d.data()); renderAll(); }, stop);
+  db.collection("gates").orderBy("order").onSnapshot((s) => { gates = s.docs.map((d) => ({ id: d.id, ...d.data() })); renderGates(); renderStats(); renderPlan(); renderDetail(); }, () => {});
+  db.collection("notes").orderBy("at", "desc").limit(100).onSnapshot((s) => { notes = s.docs.map((d) => d.data()); renderNotes(); }, () => {});
+  renderAll();
+})();
+
+$("#note-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!db) return;
+  const text = $("#note-text").value.trim();
+  if (!text) return;
+  $("#note-send").disabled = true;
+  try {
+    await db.collection("notes").add({ to: $("#note-to").value, text, at: new Date().toISOString(), state: "waiting" });
+    $("#note-text").value = "";
+    $("#note-msg").textContent = "Sent. The Orchestrator picks it up next cycle.";
+  } catch (err) {
+    $("#note-msg").textContent = err && err.code === "quota_exceeded" ? "The note store is full. Ask Claude to clear old notes." : "Couldn't send. Try again in a moment.";
+  } finally { $("#note-send").disabled = !canWrite; }
+});
+</script>

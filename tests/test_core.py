@@ -94,7 +94,7 @@ def test_gate_blocks_and_holds(tmp_path, monkeypatch):
     d.mkdir(parents=True)
     (d / "goal.json").write_text(json.dumps({"metric": "verdict_median_error", "op": "<", "value": 0.15}))
     (d / "eval.json").write_text(json.dumps({"judged_on": "synthetic", "synthetic": {"verdict_median_error": 0.1}}))
-    for r in ("qa.md", "privacy.md", "economics.md"):
+    for r in ("qa.md", "privacy.md", "economics.md", "ops.md"):
         (d / r).write_text("STATUS: PASS\n")
     assert gate.main("1") == 0
     (d / "privacy.md").write_text("STATUS: BLOCK\nraw images retained")
