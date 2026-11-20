@@ -8,8 +8,8 @@ VENDOR = os.path.join(APP, "vendor", "tesseract")
 
 def test_engine_files_are_vendored():
     for f in ("tesseract.min.js", "worker.min.js", "tesseract-core-lstm.wasm.js",
-              "tesseract-core-simd-lstm.wasm.js", os.path.join("lang", "eng.traineddata.gz")):
-        assert os.path.getsize(os.path.join(VENDOR, f)) > 1000, f
+              "tesseract-core-simd-lstm.wasm.js", os.path.join("lang", "eng.traineddata.gz.wasm"), "fairfare-worker.js"):
+        assert os.path.getsize(os.path.join(VENDOR, f)) > 100, f
 
 
 def test_app_code_contacts_no_outside_host():

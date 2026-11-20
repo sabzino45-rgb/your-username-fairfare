@@ -271,7 +271,7 @@ async function getOcrWorker() {
   if (!ocrWorker) {
     const base = OCR_BASE();
     ocrWorker = T.createWorker("eng", 1, {
-      workerPath: base + "worker.min.js", corePath: base, langPath: base + "lang", workerBlobURL: false,
+      workerPath: base + "fairfare-worker.js", corePath: base, langPath: base + "lang", workerBlobURL: false,
     }).catch((e) => { ocrWorker = null; throw e; });
   }
   return ocrWorker;
