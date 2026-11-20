@@ -100,3 +100,51 @@ Evidence:
 - Screenshot: /tmp/claude-0/-home-user/822f3609-d26f-5d56-bc0b-4c5c4ba5b5fd/scratchpad/check-400px.png (outside the repo). It shows the MARGINAL card, Details closed, the safety line, the input card and the shift goal, with layout intact.
 - Font look varies by device: Android has no Arial Narrow, so it falls back to Roboto with `font-stretch: condensed` (Roboto Condensed where the system has it). That is QA's to eyeball on a phone.
 - Remaining third-party request: cdn.jsdelivr.net for Tesseract.js, only when a scan starts. It is the existing, documented exception (spec R1 acceptance criterion 4). Self-hosting it is a possible later privacy step.
+
+## Attempt 2 (fixes for QA BLOCK, reports/cycle-1/qa.md)
+
+UI items only. Parser items #1–3 and #8–12 belong to the Scan Engineer, and I didn't touch parser.py, engine.js or eval_set/.
+
+| QA item | Fix (app/js/app.js unless noted) |
+|---|---|
+| **#4 H4: stale verdict** | `scanImage()` (paste, drop, file pick, "Paste screenshot" button, share) now clears the old offer before OCR starts. The card goes to a neutral state: `data-d="READING"`, grey, "—", "Reading the screenshot…", no word, colour, numbers or Details. A failed read (OCR error, no offer found, non-image) shows **CAN'T TELL** with "Couldn't read that screenshot…" inside the card at the top, never the previous verdict. |
+| **#5 rapid pastes** | A request counter `scanSeq`: each scan takes a number, and a result is ignored unless it is still the latest. Typing, the demo button or leaving Scan mode also cancels a pending read. |
+| **#6 numbers above the fold** | The "Read from the card: Fare shown £…" readout was moved out of the input card and into "Details (parked only)". For CAN'T TELL with partial text, a Details holding only the readout is shown, so a parked driver can see what was missing. Readout numbers are wrapped in `ltr()`. |
+| **#7 word breaks mid-word** | `.word` in styles.css is now `white-space: nowrap; word-break: keep-all; overflow-wrap: normal` (and line-height 1). The new `fitWord()` scales the font down until the word fits on one line (floor 18px), and runs on every render and on resize. |
+| **#13 huge paste** | `MAX_TEXT = 5000`: `maxlength` is set on the textarea, and both the textarea value and OCR text are sliced to 5000 before parsing. |
+| **#15 Details across identical offers** | Each new offer (scan, demo click, paste into the textarea) increments `offerGen`. Details stays open only for the same generation **and** the same numbers. |
+
+The shift-goal card's £ figures, which QA noted as low severity, are unchanged. That card is below the fold at 390×844 and is a parked planning tool.
+
+**Tests:** 2 new pytest tests and 1 updated, in tests/test_share_target.py:
+- the scan clears the verdict before OCR and drops stale results
+- the readout and numbers sit inside Details
+- Details is tied to the offer generation
+- `MAX_TEXT` and `maxlength` are present
+- `.word` uses nowrap with no `overflow-wrap: anywhere`
+
+`python3 -m pytest -q`: **40 passed** (includes the Scan Engineer's new tests).
+
+**Playwright:** Chromium, app/ served on port 8771, server stopped afterwards. Tesseract was stubbed by routing the jsdelivr URL to a fake `recognize()` with a set delay, text and failure, so the success and timing paths ran for the first time. All 16 checks passed:
+- 390×844, QA's repro: a £30 text offer gives ACCEPT and Details is opened. Then an image is pasted and its read fails after 600 ms.
+  - During the read: READING, "—", no Details, no £ or digits.
+  - After the read fails: CAN'T TELL with "Couldn't read…", no Details.
+- Rapid pastes (£40 at 800 ms, then £6 at 100 ms) end on DECLINE, the newest. Typing during a pending read also wins.
+- A scanned demo gives MARGINAL with Details closed. The visible text of the verdict card, the safety line and the input card has **no £ and no digits**. The readout appears only inside Details.
+- A new scan with identical numbers closes Details, and so does "Try a demo offer" pressed again.
+- An 850 KB paste completes in 442 ms (maxlength is 5000).
+- Word fit at **390×844 and 360×780**: all 26 languages × ACCEPT, MARGINAL, DECLINE and CAN'T TELL are on one line in every case. The check uses one line box, height ≤ line-height, and scrollWidth ≤ clientWidth.
+- No page errors.
+
+Screenshots (outside the repo), all in /tmp/claude-0/-home-user/822f3609-d26f-5d56-bc0b-4c5c4ba5b5fd/scratchpad/:
+- a2-failed-read-390.png
+- a2-scan-marginal-390.png
+- a2-bn-360.png ("প্রত্যাখ্যান করুন" fitted on one line)
+- a2-ar-360.png, a2-ru-360.png, a2-lt-360.png
+
+Script: pw_attempt2.js in the same folder.
+
+**Still untested / open:**
+- Real Tesseract OCR: the stub stands in for the CDN, which is blocked in this sandbox.
+- Real phone fonts: fitting is measured, so it should hold, but long words in bn, lt, ru and ku get smaller than the 58px English word, so they are less glanceable. That is a reason to review shorter words with fluent speakers.
+- Real-device paste and share.

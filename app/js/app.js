@@ -71,6 +71,12 @@ let checkMode = "scan";
 let currentOffer = null;
 let lastText = "";
 let verdictSig = "";
+// Every new offer (scan, demo, text paste) gets a new generation, so Details closes even if the numbers match.
+let offerGen = 0, verdictGen = -1;
+// Scan state shown in the verdict card: null, "reading" or "failed". scanSeq drops stale OCR results.
+let scanState = null, scanSeq = 0;
+const MAX_TEXT = 5000; // cap pasted or OCR text before parsing (huge pastes froze the page)
+const cancelScan = () => { scanSeq++; scanState = null; };
 
 function renderCheck() {
   const s = settings();
@@ -91,7 +97,7 @@ function renderCheck() {
         <p class="readout" id="scan-status" aria-live="polite"></p>
       </div>
       <div data-pane="paste">
-        <textarea id="ocr" spellcheck="false" aria-label="${esc(t("check.pasteHint"))}" placeholder="${esc(t("check.pasteHint"))}"></textarea>
+        <textarea id="ocr" spellcheck="false" maxlength="${MAX_TEXT}" aria-label="${esc(t("check.pasteHint"))}" placeholder="${esc(t("check.pasteHint"))}"></textarea>
       </div>
       <div data-pane="type" class="grid2">
         <label class="field full">${esc(t("check.fare"))}<input type="number" id="m-fare" inputmode="decimal" step="0.01" min="0"></label>
@@ -100,7 +106,6 @@ function renderCheck() {
         <label class="field">${esc(t("check.tripMin"))}<input type="number" id="m-tmin" inputmode="decimal" min="0"></label>
         <label class="field">${esc(t("check.tripMi"))}<input type="number" id="m-tmi" inputmode="decimal" step="0.1" min="0"></label>
       </div>
-      <p class="readout" id="readout"></p>
       <div class="row">
         <button class="btn ghost small" id="demo">${esc(t("check.demo"))}</button>
         <button class="btn small" id="save" disabled>${esc(t("check.save"))}</button>
@@ -119,9 +124,10 @@ function renderCheck() {
 
   $$(".seg button", view).forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#ocr").value = lastText;
-  $("#ocr").addEventListener("input", () => { lastText = $("#ocr").value; updateCheck(); });
-  $$("[data-pane=type] input", view).forEach((el) => el.addEventListener("input", updateCheck));
-  $("#demo").addEventListener("click", () => { lastText = DEMO; $("#ocr").value = DEMO; setMode("paste"); });
+  $("#ocr").addEventListener("paste", () => offerGen++); // a pasted card is a new offer
+  $("#ocr").addEventListener("input", () => { cancelScan(); lastText = $("#ocr").value.slice(0, MAX_TEXT); updateCheck(); });
+  $$("[data-pane=type] input", view).forEach((el) => el.addEventListener("input", () => { cancelScan(); updateCheck(); }));
+  $("#demo").addEventListener("click", () => { cancelScan(); offerGen++; lastText = DEMO; $("#ocr").value = DEMO; setMode("paste"); });
   $("#scan-file").addEventListener("change", (e) => scanImage(e.target.files[0]));
   // Optional "Paste screenshot" button: only where the async clipboard can read images.
   const pasteBtn = $("#paste-shot");
@@ -134,7 +140,7 @@ function renderCheck() {
       const type = it.types.find((x) => x.startsWith("image/"));
       if (type) { try { return scanImage(await it.getType(type)); } catch { break; } }
     }
-    $("#scan-status").textContent = t("check.scanFailed");
+    scanImage(new Blob([], { type: "application/x-none" })); // no image: same failed state as any bad scan
   });
   $("#save").addEventListener("click", saveOffer);
 
@@ -155,6 +161,7 @@ function renderCheck() {
 }
 
 function setMode(m) {
+  if (m !== "scan") cancelScan(); // leaving Scan drops any read in progress and its failed state
   checkMode = m;
   $$(".seg button", view).forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === m));
   $$("[data-pane]", view).forEach((p) => (p.hidden = p.dataset.pane !== m));
@@ -165,39 +172,57 @@ const FIELD = { fare: "check.fare", pickup_min: "check.pickupMin", pickup_miles:
 
 function updateCheck() {
   const s = settings();
-  let o;
+  const el = $("#verdict");
+  const wasOpen = !!$("#details", el)?.open;
+  $("#saved").hidden = true;
+  // While a screenshot is read, or after a failed read, never leave the previous verdict up (QA H4).
+  if (scanState) {
+    currentOffer = null;
+    $("#save").disabled = true;
+    verdictSig = "";
+    el.dataset.d = scanState === "reading" ? "READING" : "UNKNOWN";
+    el.innerHTML = scanState === "reading"
+      ? `<div class="word">—</div><p class="sub" style="margin:0;color:var(--fg)">${esc(t("check.scanning"))}</p>`
+      : `<div class="word">${esc(t("v.UNKNOWN"))}</div><p class="sub" style="margin:0;color:var(--fg)">${esc(t("check.scanFailed"))}</p>`;
+    fitWord();
+    return;
+  }
+  let o, readout = "";
   if (checkMode === "type") {
     const n = (id) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : null; };
     o = manualOffer({ fare: n("#m-fare"), pickup_min: n("#m-pmin"), pickup_miles: n("#m-pmi"), trip_min: n("#m-tmin"), trip_miles: n("#m-tmi") });
-    $("#readout").textContent = "";
   } else {
     o = parseOfferText(lastText);
-    $("#readout").innerHTML = lastText.trim() ? `${esc(t("check.read"))}: ` + Object.keys(FIELD).map((k) =>
+    // What was read from the card has numbers in it, so it lives inside Details too (SAFETY.md).
+    readout = lastText.trim() ? `<p class="readout">${esc(t("check.read"))}: ` + Object.keys(FIELD).map((k) =>
       o[k] === null ? `<span class="miss">${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))}: ${esc(t("check.notFound"))}</span>`
-                    : `${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))} <b>${k === "fare" ? money(o[k]) : num(o[k])}</b>`).join(" · ") : "";
+                    : `${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))} <b>${ltr(k === "fare" ? money(o[k]) : num(o[k]))}</b>`).join(" · ") + "</p>" : "";
   }
   const v = estimate(o, s);
   currentOffer = v.decision === "UNKNOWN" ? null : v;
   $("#save").disabled = !currentOffer;
-  $("#saved").hidden = true;
-  const el = $("#verdict");
   el.dataset.d = v.decision;
+  // SAFETY.md: the app can't tell if the car is moving, so only the word and colour show at first.
+  // Numbers sit behind "Details (parked only)", closed by default and closed again on each new offer.
+  const vo = v.offer || {};
+  const sig = JSON.stringify([v.decision, vo.fare, vo.pickup_min, vo.pickup_miles, vo.trip_min, vo.trip_miles, s]);
+  const keepOpen = wasOpen && sig === verdictSig && verdictGen === offerGen;
+  verdictSig = sig;
+  verdictGen = offerGen;
+  const details = (inner) => `<details class="details" id="details"${keepOpen ? " open" : ""}><summary>${esc(t("v.details"))}</summary>${inner}</details>`;
   if (v.decision === "UNKNOWN") {
     const blank = !(lastText.trim() || checkMode === "type" && $$("[data-pane=type] input", view).some((i) => i.value));
     el.innerHTML = `<div class="word">${blank ? "—" : esc(t("v.UNKNOWN"))}</div>
-      <p class="sub" style="margin:0;color:var(--fg)">${esc(blank ? t("check.pasteHint") : t("v.sub.UNKNOWN"))}</p>`;
+      <p class="sub" style="margin:0;color:var(--fg)">${esc(blank ? t("check.pasteHint") : t("v.sub.UNKNOWN"))}</p>
+      ${readout ? details(readout) : ""}`;
+    fitWord();
     return;
   }
-  // SAFETY.md: the app can't tell if the car is moving, so only the word and colour show at first.
-  // Numbers sit behind "Details (parked only)", closed by default and closed again on each new verdict.
-  const vo = v.offer;
-  const sig = JSON.stringify([v.decision, vo.fare, vo.pickup_min, vo.pickup_miles, vo.trip_min, vo.trip_miles, s]);
-  const keepOpen = sig === verdictSig && !!$("#details", el)?.open;
-  verdictSig = sig;
   el.innerHTML = `
     <div class="word">${esc(t("v." + v.decision))}</div>
     <p style="margin:0">${esc(t("v.sub." + v.decision))} <span class="sub">${esc(t("v.conf." + v.confidence))}</span></p>
     <details class="details" id="details"${keepOpen ? " open" : ""}><summary>${esc(t("v.details"))}</summary>
+    ${readout}
     <div class="range">${ltr(`${money(v.perHr[0], 0)}–${money(v.perHr[2], 0)}<small> / h</small>`)}</div>
     <div class="grid3">
       <div class="stat"><div class="k">${esc(t("v.perMile"))}</div><div class="v">${ltr(money(v.perMile[1]))}</div></div>
@@ -209,7 +234,22 @@ function updateCheck() {
     ${v.decision !== "ACCEPT" ? `<p class="sub" style="margin:0;color:var(--fg)">${esc(t("v.needs", { fare: money(v.fareNeeded) }))}</p>` : ""}
     ${v.reasons.length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(t("v.reason." + r))}</li>`).join("")}</ul>` : ""}
     </details>`;
+  fitWord();
 }
+
+// The verdict word stays on one line and is scaled down until it fits (long words in some languages).
+function fitWord() {
+  const w = $("#verdict .word");
+  if (!w) return;
+  w.style.fontSize = "";
+  const avail = w.clientWidth;
+  if (!avail) return;
+  let size = parseFloat(getComputedStyle(w).fontSize);
+  if (w.scrollWidth > avail) size = Math.max(18, Math.floor(size * avail / w.scrollWidth));
+  w.style.fontSize = size + "px";
+  while (w.scrollWidth > avail && size > 18) w.style.fontSize = (size -= 1) + "px";
+}
+window.addEventListener("resize", fitWord);
 
 let tesseractLoading = null;
 function loadTesseract() {
@@ -229,21 +269,33 @@ function loadTesseract() {
 async function scanImage(file) {
   if (!file) return;
   if (checkMode !== "scan") setMode("scan");
-  const status = $("#scan-status");
-  if (!/^image\//.test(file.type || "")) { status.textContent = t("check.scanFailed"); return; }
-  status.textContent = t("check.scanning");
+  // New screenshot: clear the old verdict at once (QA H4); only the newest read may land (QA rapid pastes).
+  const my = ++scanSeq;
+  offerGen++;
+  lastText = "";
+  const finish = (state, text = "") => {
+    if (my !== scanSeq) return; // a newer scan (or typed input) has taken over
+    scanState = state;
+    lastText = text;
+    if (!$("#verdict")) return; // Check screen not open: renderCheck shows this state when it is
+    $("#ocr").value = text;
+    $("#scan-status").textContent = state === "failed" ? t("check.scanFailed") : "";
+    updateCheck();
+  };
+  if (!/^image\//.test(file.type || "")) { finish("failed"); $("#scan-file").value = ""; return; }
+  scanState = "reading";
+  $("#scan-status").textContent = t("check.scanning");
+  updateCheck();
   try {
     const T = await loadTesseract();
     const { data } = await T.recognize(file, "eng");
-    lastText = data.text || "";
-    const o = parseOfferText(lastText);
-    status.textContent = o.missing.length === 5 ? t("check.scanFailed") : "";
-    if (o.missing.length === 5) lastText = "";
-    updateCheck();
+    const text = (data.text || "").slice(0, MAX_TEXT);
+    if (parseOfferText(text).missing.length === 5) finish("failed");
+    else finish(null, text);
   } catch {
-    status.textContent = t("check.scanFailed");
+    finish("failed");
   } finally {
-    $("#scan-file").value = "";
+    if ($("#scan-file")) $("#scan-file").value = "";
   }
 }
 
@@ -287,7 +339,7 @@ document.addEventListener("drop", (e) => {
   const files = e.dataTransfer.files;
   const img = imageFrom(files);
   if (img) scanImage(img);
-  else if (files.length) { setMode("scan"); $("#scan-status").textContent = t("check.scanFailed"); }
+  else if (files.length) scanImage(files[0]); // not an image: shows the failed state
 });
 
 // Share target: sw.js parks the shared image in SHARE_CACHE and redirects here (#check).

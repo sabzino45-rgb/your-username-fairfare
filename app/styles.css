@@ -98,7 +98,8 @@ textarea { min-height: 110px; resize: vertical; font: 14px/1.45 var(--mono); }
 .verdict[data-d="ACCEPT"] { background: var(--go-bg); border-color: var(--go); }
 .verdict[data-d="MARGINAL"] { background: var(--wait-bg); border-color: var(--wait); }
 .verdict[data-d="DECLINE"] { background: var(--stop-bg); border-color: var(--stop); }
-.word { font: 700 58px/.9 var(--display); letter-spacing: .02em; color: var(--unk); overflow-wrap: anywhere; }
+/* One line, never broken inside a word; app.js fitWord() scales long words down to fit */
+.word { font: 700 58px/1 var(--display); letter-spacing: .02em; color: var(--unk); white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
 .verdict[data-d="ACCEPT"] .word { color: var(--go); }
 .verdict[data-d="MARGINAL"] .word { color: var(--wait); }
 .verdict[data-d="DECLINE"] .word { color: var(--stop); }

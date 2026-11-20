@@ -58,6 +58,31 @@ def test_verdict_words_follow_safety_md():
 def test_numbers_behind_details():
     app = read("js", "app.js")
     body = app[app.index("function updateCheck"):app.index("let tesseractLoading")]
-    word, details, rng = body.rfind('<div class="word">'), body.index("<details"), body.index('class="range"')
-    assert word < details < rng
-    assert "<details" in body and " open" in body  # open only when kept for the same verdict
+    word = body.rfind('<div class="word">')
+    details = body.index("<details", word)
+    readout, rng = body.index("${readout}", word), body.index('class="range"', word)
+    assert word < details < readout < rng, "readout and numbers must sit inside Details"
+    assert 'id="readout"' not in app, "the parsed-numbers readout must not sit outside Details"
+    # Details stays open only for the same offer generation, not just identical numbers (QA #15)
+    assert "verdictGen === offerGen" in body
+
+
+def test_scan_clears_old_verdict_and_drops_stale_results():
+    app = read("js", "app.js")
+    scan = app[app.index("async function scanImage"):app.index("function saveOffer")]
+    assert "++scanSeq" in scan and "my !== scanSeq" in scan, "stale OCR results must be ignored"
+    reading = scan.index('scanState = "reading"')
+    assert reading < scan.index("updateCheck()", reading) < scan.index("loadTesseract()"), \
+        "the old verdict must be cleared before OCR starts"
+    assert 'finish("failed")' in scan
+    body = app[app.index("function updateCheck"):]
+    assert body.index("if (scanState)") < body.index("estimate(o, s)"), "scan state overrides any old verdict"
+
+
+def test_text_capped_and_word_never_breaks():
+    app, css = read("js", "app.js"), read("styles.css")
+    assert "const MAX_TEXT = 5000" in app and 'maxlength="${MAX_TEXT}"' in app
+    assert ".slice(0, MAX_TEXT)" in app
+    word = re.search(r"\n\.word \{([^}]*)\}", css).group(1)
+    assert "white-space: nowrap" in word and "overflow-wrap: anywhere" not in word
+    assert "function fitWord" in app
