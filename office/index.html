@@ -2,73 +2,74 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500;700&display=swap">
 <style>
-/* Layout: an architect's floor plan of the agent team (rooms = departments, desks = agents),
-   with a detail panel for the selected desk and the team's response log beside it. */
+/* Layout: a robot school at night. Each department is a classroom with a chalkboard at the front
+   showing its live lesson; robots sit at desks facing it. Detail panel and the team's log sit beside.
+   Deliberately one dark look (after-hours academy), so colours are set explicitly for every host theme. */
 :root {
-  --paper: #eef2f4; --sheet: #fbfcfc; --ink: #15212b; --muted: #5b6a75; --line: #c3ced6; --grid: #dfe6eb;
-  --accent: #1d8a55;
-  --command: #15212b; --discovery: #2f63a3; --engineering: #9a5b12; --review: #a3304f; --you: #1d8a55;
-  --idle: #8c9aa4; --working: #c98a00; --done: #1d8a55; --blocked: #c0392b;
-  --visor: #1b2731; --eye: #5fd4f5; --desk: #b9c5cd; --deskleg: #8f9da7; --screen: #dff4ec;
-  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --paper: #0b1120; --sheet: #121a2f; --ink: #e8edf8; --muted: #8e9cb8; --line: #26345a; --grid: #151f38;
+  --accent: #7cf3d0;
+  --command: #c4cdfa; --discovery: #6aa8ff; --engineering: #ffb547; --review: #ff6f91; --you: #7cf3d0;
+  --idle: #5d6c8a; --working: #ffc94a; --done: #5ef0a8; --blocked: #ff5d6c;
+  --visor: #050913; --eye: #7fe9ff; --desk: #2a3a5f; --deskleg: #1a2442; --screen: #0e3b36;
+  --board: #1d3a31; --board-hi: #24483c; --chalk: #edf3e6; --frame: #7a5634;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
-    --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
-    --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
-    --visor: #0a1116; --eye: #8eeaff; --desk: #3a4955; --deskleg: #2a3640; --screen: #12352a;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
-  --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
-  --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
-  --visor: #0a1116; --eye: #8eeaff; --desk: #3a4955; --deskleg: #2a3640; --screen: #12352a;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --chalkfont: "Caveat", "Segoe Print", "Comic Sans MS", cursive;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
   background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body); margin: 0;
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(900px 500px at 85% -10%, rgba(106, 168, 255, .16), transparent 60%),
+    radial-gradient(700px 420px at -10% 30%, rgba(124, 243, 208, .09), transparent 60%),
+    linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px; background-attachment: fixed;
 }
 .wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex; flex-direction: column; gap: 18px; }
 header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .label { font: 500 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-h1 { font: 700 clamp(30px, 5vw, 44px)/1.02 var(--display); margin: 6px 0 0; letter-spacing: -.01em; text-wrap: balance; }
+h1 { font: 700 clamp(32px, 5.4vw, 52px)/1 var(--display); margin: 6px 0 0; letter-spacing: .005em; text-wrap: balance; text-transform: uppercase; }
+h1 em { font-style: normal; color: var(--accent); text-shadow: 0 0 22px rgba(124, 243, 208, .45); }
 h2 { font: 700 19px/1.2 var(--display); margin: 0; }
 h3 { font: 600 15px/1.3 var(--body); margin: 0; }
 .lede { color: var(--muted); max-width: 62ch; margin: 6px 0 0; }
 .stats { display: flex; gap: 8px; flex-wrap: wrap; }
-.stat { background: var(--sheet); border: 1px solid var(--line); padding: 8px 12px; min-width: 104px; }
+.stat { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-width: 104px; }
 .stat b { display: block; font: 500 22px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
 .stat span { font: 400 11px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
 
 .layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
-/* Floor plan */
-.plan { background: var(--sheet); border: 2px solid var(--ink); padding: 14px; display: grid; gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-areas:
-  "cmd cmd you you you you" "disc disc disc eng eng eng" "rev rev rev rev rev rev"; position: relative; }
+/* School plan */
+.plan { background: linear-gradient(180deg, #0f1730, #0c1326); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+  display: grid; gap: 14px; grid-template-columns: repeat(6, minmax(0, 1fr)); position: relative;
+  grid-template-areas: "cmd cmd you you you you" "disc disc disc eng eng eng" "rev rev rev rev rev rev";
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .04); }
 @media (max-width: 620px) { .plan { grid-template-columns: 1fr; grid-template-areas: "cmd" "you" "disc" "eng" "rev"; } }
-.room { border: 1.5px dashed var(--line); padding: 10px 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 8px; position: relative; }
-.room::before { content: ""; position: absolute; left: -2px; top: 18px; width: 4px; height: 26px; background: var(--sheet); } /* door gap */
-.room .rname { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.room .rname .label { color: var(--rc); }
-.room .step { font: 500 11px var(--mono); color: var(--muted); }
-.desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-.desk { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 9px; border: 1px solid var(--line);
-  background: var(--paper); position: relative; min-width: 0; }
-.desk:hover { border-color: var(--rc); }
+.room { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; position: relative;
+  border: 2px solid color-mix(in srgb, var(--rc) 35%, var(--line));
+  background: repeating-conic-gradient(rgba(255, 255, 255, .025) 0 25%, transparent 0 50%) 0 0 / 28px 28px, #101830; }
+.room::after { content: ""; position: absolute; right: 18px; bottom: -2px; width: 34px; height: 4px; background: #0c1326; }
+.board { background: radial-gradient(120% 140% at 30% 0%, var(--board-hi), var(--board)); border: 5px solid var(--frame); border-radius: 6px;
+  padding: 8px 12px 9px; box-shadow: inset 0 0 18px rgba(0, 0, 0, .45), 0 4px 0 #3e2a17; position: relative; min-width: 0; }
+.board::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: -10px; height: 4px; background: #5c3f24; border-radius: 2px; }
+.board .bh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.board .rn { font: 700 22px/1.05 var(--chalkfont); color: var(--chalk); text-shadow: 0 0 1px rgba(255, 255, 255, .6); }
+.board .rn b { color: var(--rc); font-weight: 700; }
+.board .step { font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: rgba(237, 243, 230, .6); white-space: nowrap; }
+.board .lesson { font: 500 18px/1.15 var(--chalkfont); color: rgba(237, 243, 230, .88); margin-top: 2px; overflow-wrap: break-word; }
+.desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 6px; }
+.desk { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 9px; border: 1px solid transparent; border-radius: 12px;
+  background: rgba(255, 255, 255, .02); position: relative; min-width: 0; transition: border-color .2s, box-shadow .2s, transform .2s; }
+.desk:hover { border-color: color-mix(in srgb, var(--rc) 60%, transparent); transform: translateY(-2px); }
 .desk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.desk[aria-pressed="true"] { border: 2px solid var(--rc); padding: 8px; background: var(--sheet); }
+.desk[aria-pressed="true"] { border-color: var(--rc); background: color-mix(in srgb, var(--rc) 9%, var(--sheet)); box-shadow: 0 0 0 1px var(--rc), 0 0 28px color-mix(in srgb, var(--rc) 35%, transparent); }
 .desk .top { display: flex; align-items: center; gap: 8px; }
 .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none;
   font: 700 12px var(--display); color: var(--sheet); background: var(--rc); }
@@ -83,8 +84,8 @@ h3 { font: 600 15px/1.3 var(--body); margin: 0; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 
 /* Panels */
-.panel { background: var(--sheet); border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.panel.sel { border-top: 4px solid var(--rc); }
+.panel { background: var(--sheet); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel.sel { border-top: 3px solid var(--rc); box-shadow: 0 -10px 40px -24px var(--rc); }
 .kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; font-size: 14px; margin: 0; }
 .kv dt { font: 500 11px/1.9 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
@@ -95,10 +96,10 @@ code { font: 13px var(--mono); background: var(--paper); padding: 1px 4px; }
 .resp p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .empty { color: var(--muted); font-size: 14px; margin: 0; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.btn { font: 600 13px var(--body); border: 1px solid var(--ink); background: var(--ink); color: var(--sheet); padding: 8px 12px; cursor: pointer; }
-.btn.ghost { background: transparent; color: var(--ink); }
+.btn { font: 600 13px var(--body); border: 1px solid var(--accent); background: var(--accent); color: #062019; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
 .btn:disabled { opacity: .45; cursor: default; }
-select, textarea { font: 14px var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); padding: 8px 10px; width: 100%; }
+select, textarea { font: 14px var(--body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; width: 100%; }
 textarea { min-height: 80px; resize: vertical; }
 label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .gate { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
@@ -108,8 +109,8 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 .gate .d { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .note { font-size: 12px; color: var(--muted); margin: 0; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
-.tabs button { font: 500 12px var(--mono); border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 8px; cursor: pointer; }
-.tabs button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+.tabs button { font: 500 12px var(--mono); border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
 /* Robots */
 .bot-svg { width: 100%; max-width: 170px; height: auto; display: block; margin: 0 auto; overflow: visible; }
@@ -120,7 +121,9 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 .bot-svg .mon { fill: var(--visor); } .bot-svg .scr { fill: var(--screen); }
 .bot-svg .acc { fill: var(--accent); } .bot-svg .accs { stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; }
 .bot-svg .paper { fill: var(--sheet); stroke: var(--line); }
-.bot-svg .ant { fill: var(--idle); } .bot-svg .ant[data-s="working"] { fill: var(--working); animation: pulse 1s ease-in-out infinite; }
+.bot-svg .ant { fill: var(--idle); }
+.bot-svg .ant[data-s="working"] { filter: drop-shadow(0 0 4px var(--working)); } .bot-svg .ant[data-s="done"] { filter: drop-shadow(0 0 4px var(--done)); } .bot-svg .ant[data-s="blocked"] { filter: drop-shadow(0 0 4px var(--blocked)); }
+.bot-svg .eye { filter: drop-shadow(0 0 2.5px var(--eye)); } .bot-svg .ant[data-s="working"] { fill: var(--working); animation: pulse 1s ease-in-out infinite; }
 .bot-svg .ant[data-s="done"] { fill: var(--done); } .bot-svg .ant[data-s="blocked"] { fill: var(--blocked); animation: pulse .6s ease-in-out infinite; }
 .bot { animation: bob 3.2s ease-in-out infinite; }
 .eyes { animation: blink 4.5s infinite; transform-box: fill-box; transform-origin: center; }
@@ -166,9 +169,9 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 <div class="wrap">
   <header>
     <div>
-      <div class="label">FairFare · Agent office · South West</div>
-      <h1>Who's working on FairFare</h1>
-      <p class="lede">Twelve robot agents run the improvement loop, plus you at the human desk. Pick a robot to see the agent's job, what it reads and writes, and everything it has reported.</p>
+      <div class="label">FairFare · Robot academy · Night shift</div>
+      <h1>FairFare <em>Robot</em> School</h1>
+      <p class="lede">Twelve robot agents learn and work in their classrooms, plus you in the staff room. Each chalkboard shows the room's live lesson. Pick a robot to see the agent's job, what it reads and writes, and everything it has reported.</p>
     </div>
     <div class="stats" id="stats"></div>
   </header>
@@ -211,18 +214,18 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 <script>
 // ---------- the team (mirrors .claude/agents/ in the repository) ----------
 const ROOMS = [
-  { id: "cmd", name: "Command", color: "--command", step: "Runs every step" },
-  { id: "you", doing: "Signs off", name: "Human desk", color: "--you", step: "Signs off" },
-  { id: "disc", name: "Discovery", color: "--discovery", step: "Steps 1–2" },
-  { id: "eng", name: "Engineering", color: "--engineering", step: "Step 3" },
-  { id: "rev", name: "Review gate", color: "--review", step: "Step 4" },
+  { id: "cmd", name: "Command", place: "Head's office", color: "--command", step: "Every step" },
+  { id: "you", name: "You", place: "Staff room", color: "--you", step: "Sign-off" },
+  { id: "disc", name: "Discovery", place: "Classroom 1", color: "--discovery", step: "Steps 1–2" },
+  { id: "eng", name: "Engineering", place: "Lab 2", color: "--engineering", step: "Step 3" },
+  { id: "rev", name: "Review", place: "Exam hall", color: "--review", step: "Step 4" },
 ];
 const AGENTS = [
   { id: "orchestrator", doing: "Checks off the plan", name: "Orchestrator", room: "cmd", ini: "OR",
     role: "Runs the loop. Sets one measurable goal per cycle, assigns work, collects reports and decides pass or fail.",
     owns: "The cycle and the decision log", reads: "insights.md, decisions.md, every agent's report", writes: "decisions.md, reports/cycle-N/",
     block: false, gates: "Never approves legal, pricing, safety or shipping. Those go to you." },
-  { id: "you", name: "You (owner)", room: "you", ini: "YOU",
+  { id: "you", doing: "Signs off", name: "You (owner)", room: "you", ini: "YOU",
     role: "Approves what agents may not: legal and Uber terms questions, pricing, shipping to drivers, and any change to the safety rule.",
     owns: "Final sign-off", reads: "Waiting on you list, cycle summaries", writes: "Ticks in human_gates.md, notes to the team", block: true, gates: "Your word is final." },
   { id: "research", doing: "Searches for evidence", name: "Research", room: "disc", ini: "RE",
@@ -338,10 +341,26 @@ const wordOf = (id) => id === "you" ? (gates.some((g) => g.state !== "done") ? "
 const STATE_WORD = { idle: "Idle", working: "Working", done: "Reported", blocked: "Blocking" };
 
 // ---------- render ----------
+// What the chalkboard says: what this room's robots are doing right now
+function lessonFor(r) {
+  if (r.id === "you") {
+    const n = gates.filter((g) => g.state !== "done").length;
+    return n ? `Today: ${n} thing${n === 1 ? "" : "s"} to sign off` : "Nothing to sign off. Put the kettle on.";
+  }
+  const inRoom = AGENTS.filter((a) => a.room === r.id);
+  const working = inRoom.filter((a) => stateOf(a.id) === "working");
+  if (working.length) return `Now: ${(status[working[0].id] || {}).task || working[0].doing}`;
+  const blocked = inRoom.find((a) => stateOf(a.id) === "blocked");
+  if (blocked) return `Stopped: ${blocked.name} is blocking`;
+  if (inRoom.some((a) => stateOf(a.id) === "done")) return "Lesson done. Homework handed in.";
+  return "Free period. Waiting for the next cycle.";
+}
+
 function renderPlan() {
   $("#plan").innerHTML = ROOMS.map((r) => `
     <div class="room" style="grid-area:${r.id};--rc:var(${r.color})">
-      <div class="rname"><span class="label">${esc(r.name)}</span><span class="step">${esc(r.step)}</span></div>
+      <div class="board"><div class="bh"><span class="rn">${esc(r.place)} · <b>${esc(r.name)}</b></span><span class="step">${esc(r.step)}</span></div>
+        <div class="lesson">${esc(lessonFor(r))}</div></div>
       <div class="desks">${AGENTS.filter((a) => a.room === r.id).map((a) => `
         <button class="desk" data-id="${a.id}" aria-pressed="${a.id === selected}" style="--rc:var(${r.color})">
           ${robot(a, stateOf(a.id))}
