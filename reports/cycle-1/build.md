@@ -75,3 +75,28 @@ The 3 new strings in the 25 non-English files also need fluent review in the sam
 - The `<details>` element is a tap target, but it is optional and labelled "parked only". Nothing needs a tap to get the verdict.
 - 22 languages have new verdict words that a fluent speaker hasn't reviewed (table above). Long words (bn "প্রত্যাখ্যান করুন") wrap at the 58px display size.
 - One parity test is red because of the concurrent Scan Engineer work. Re-run the suite after their hand-off.
+
+## Privacy fix (after the Privacy block): no Google Fonts
+
+Privacy blocked the release because every page load sent the driver's IP and browser details to Google Fonts.
+
+Changes:
+- **app/index.html:** removed the two `preconnect` links (fonts.googleapis.com, fonts.gstatic.com) and the Google Fonts stylesheet link.
+- **app/styles.css:** font tokens now use system fonts only:
+  - display: "Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", "Sans Narrow", system-ui, sans-serif
+  - body: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif
+  - mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace
+  - Added `.wordmark, h1, .word, .level { font-stretch: condensed; }` after their `font` shorthands, because the shorthand resets the stretch.
+- **app/sw.js:** cache bumped `fairfare-v2` to `fairfare-v3`.
+- No other host was added. A grep of app/ finds no `googleapis`, `gstatic`, Barlow, Inter or JetBrains references.
+
+Evidence:
+- `python3 -m pytest -q`: **37 passed**. The Scan Engineer's parity test is green now too.
+- Playwright (Chromium, 400×860, app/ served on port 8769, server stopped after). The script loaded #check, ran the demo, visited all 6 tabs and pasted an image to trigger the Tesseract load. It logged every request: 24 in all.
+  - Hosts: `localhost:8769` and `cdn.jsdelivr.net` (Tesseract only).
+  - **0 requests to fonts.googleapis.com or fonts.gstatic.com.**
+- Console errors were only the known ones: `data/events.json` 404 (the live feed isn't built locally) and cdn.jsdelivr.net blocked (ERR_TUNNEL_CONNECTION_FAILED). No page errors.
+- Computed style of the verdict word: the display stack with `font-stretch: 75%`. Body uses the system-ui stack. No horizontal page scroll at 400px.
+- Screenshot: /tmp/claude-0/-home-user/822f3609-d26f-5d56-bc0b-4c5c4ba5b5fd/scratchpad/check-400px.png (outside the repo). It shows the MARGINAL card, Details closed, the safety line, the input card and the shift goal, with layout intact.
+- Font look varies by device: Android has no Arial Narrow, so it falls back to Roboto with `font-stretch: condensed` (Roboto Condensed where the system has it). That is QA's to eyeball on a phone.
+- Remaining third-party request: cdn.jsdelivr.net for Tesseract.js, only when a scan starts. It is the existing, documented exception (spec R1 acceptance criterion 4). Self-hosting it is a possible later privacy step.
