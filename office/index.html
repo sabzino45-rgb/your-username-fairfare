@@ -11,6 +11,7 @@
   --accent: #1d8a55;
   --command: #15212b; --discovery: #2f63a3; --engineering: #9a5b12; --review: #a3304f; --you: #1d8a55;
   --idle: #8c9aa4; --working: #c98a00; --done: #1d8a55; --blocked: #c0392b;
+  --visor: #1b2731; --eye: #5fd4f5; --desk: #b9c5cd; --deskleg: #8f9da7; --screen: #dff4ec;
   --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
@@ -20,12 +21,14 @@
     --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
     --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
     --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
+    --visor: #0a1116; --eye: #8eeaff; --desk: #3a4955; --deskleg: #2a3640; --screen: #12352a;
   }
 }
 :root[data-theme="dark"] {
   --paper: #0f171d; --sheet: #15202a; --ink: #e4ebf0; --muted: #93a3ae; --line: #2e3d49; --grid: #1b2833;
   --accent: #4fc48a; --command: #e4ebf0; --discovery: #79a7e0; --engineering: #e0a45a; --review: #ec7d9a; --you: #4fc48a;
   --idle: #6f808c; --working: #f0b54a; --done: #4fc48a; --blocked: #ff7b70; color-scheme: dark;
+  --visor: #0a1116; --eye: #8eeaff; --desk: #3a4955; --deskleg: #2a3640; --screen: #12352a;
 }
 * { box-sizing: border-box; }
 body {
@@ -60,7 +63,7 @@ h3 { font: 600 15px/1.3 var(--body); margin: 0; }
 .room .rname { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .room .rname .label { color: var(--rc); }
 .room .step { font: 500 11px var(--mono); color: var(--muted); }
-.desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .desk { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 9px; border: 1px solid var(--line);
   background: var(--paper); position: relative; min-width: 0; }
 .desk:hover { border-color: var(--rc); }
@@ -107,7 +110,57 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .tabs button { font: 500 12px var(--mono); border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 4px 8px; cursor: pointer; }
 .tabs button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Robots */
+.bot-svg { width: 100%; max-width: 170px; height: auto; display: block; margin: 0 auto; overflow: visible; }
+.bot-svg .dt { fill: var(--desk); } .bot-svg .dl { fill: var(--deskleg); }
+.bot-svg .body { fill: var(--rc); } .bot-svg .visor { fill: var(--visor); } .bot-svg .eye { fill: var(--eye); }
+.bot-svg .ink { stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.bot-svg .arm { stroke: var(--rc); stroke-width: 5; stroke-linecap: round; fill: none; }
+.bot-svg .mon { fill: var(--visor); } .bot-svg .scr { fill: var(--screen); }
+.bot-svg .acc { fill: var(--accent); } .bot-svg .accs { stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.bot-svg .paper { fill: var(--sheet); stroke: var(--line); }
+.bot-svg .ant { fill: var(--idle); } .bot-svg .ant[data-s="working"] { fill: var(--working); animation: pulse 1s ease-in-out infinite; }
+.bot-svg .ant[data-s="done"] { fill: var(--done); } .bot-svg .ant[data-s="blocked"] { fill: var(--blocked); animation: pulse .6s ease-in-out infinite; }
+.bot { animation: bob 3.2s ease-in-out infinite; }
+.eyes { animation: blink 4.5s infinite; transform-box: fill-box; transform-origin: center; }
+.armL { animation: typeL .5s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 46px 58px; }
+.armR { animation: typeR .9s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 74px 58px; }
+.scrl { animation: lines 1.6s steps(3) infinite; }
+.p-sweep { animation: sweep 2.4s ease-in-out infinite alternate; }
+.p-write { animation: write .7s ease-in-out infinite alternate; }
+.p-grow { animation: grow 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom; }
+.p-beam { animation: beam 1.4s ease-in-out infinite alternate; }
+.p-tilt { animation: tilt 2.2s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 99px 50px; }
+.p-spin { animation: spin 1.6s ease-in-out infinite alternate; transform-box: view-box; transform-origin: 90px 64px; }
+.p-led { animation: led 1s steps(2) infinite; } .p-led.b { animation-delay: .3s; } .p-led.c { animation-delay: .6s; }
+.p-crawl { animation: crawl 4s linear infinite; }
+.p-pulse { animation: pulse 2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.p-coin { animation: coin 1.4s ease-in-out infinite; }
+.p-beat { stroke-dasharray: 60; animation: beat 1.8s linear infinite; }
+.p-tick { stroke-dasharray: 14; animation: tick 2.4s ease-in-out infinite; }
+.p-stamp { animation: stamp 2.6s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes blink { 0%,92%,100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes typeL { from { transform: rotate(-4deg); } to { transform: rotate(6deg); } }
+@keyframes typeR { from { transform: rotate(-6deg); } to { transform: rotate(8deg); } }
+@keyframes lines { 0% { opacity: .35; } 50% { opacity: 1; } 100% { opacity: .6; } }
+@keyframes sweep { from { transform: translate(-6px, 2px); } to { transform: translate(4px, -3px); } }
+@keyframes write { from { transform: translate(0, 0); } to { transform: translate(-6px, 2px); } }
+@keyframes grow { 0%,100% { transform: scaleY(.85); } 50% { transform: scaleY(1.1); } }
+@keyframes beam { from { transform: translateY(0); } to { transform: translateY(14px); } }
+@keyframes tilt { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+@keyframes spin { from { transform: rotate(-25deg); } to { transform: rotate(20deg); } }
+@keyframes led { 0% { opacity: 1; } 100% { opacity: .2; } }
+@keyframes crawl { 0% { transform: translateX(0); } 50% { transform: translateX(-22px); } 100% { transform: translateX(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(1.08); } }
+@keyframes coin { 0%,100% { transform: translateY(0); } 40% { transform: translateY(-9px); } }
+@keyframes beat { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+@keyframes tick { 0%,20% { stroke-dashoffset: 14; } 60%,100% { stroke-dashoffset: 0; } }
+@keyframes stamp { 0%,60%,100% { transform: translateY(0); } 70% { transform: translateY(7px); } }
+.desk .task { font: 400 11px/1.35 var(--mono); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.head-bot { width: 56px; flex: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 
 <div class="wrap">
@@ -115,7 +168,7 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
     <div>
       <div class="label">FairFare · Agent office · South West</div>
       <h1>Who's working on FairFare</h1>
-      <p class="lede">Twelve AI agents run the improvement loop, plus you at the human desk. Pick a desk to see the agent's job, what it reads and writes, and everything it has reported.</p>
+      <p class="lede">Twelve robot agents run the improvement loop, plus you at the human desk. Pick a robot to see the agent's job, what it reads and writes, and everything it has reported.</p>
     </div>
     <div class="stats" id="stats"></div>
   </header>
@@ -159,54 +212,113 @@ label.f { display: flex; flex-direction: column; gap: 4px; font: 500 11px var(--
 // ---------- the team (mirrors .claude/agents/ in the repository) ----------
 const ROOMS = [
   { id: "cmd", name: "Command", color: "--command", step: "Runs every step" },
-  { id: "you", name: "Human desk", color: "--you", step: "Signs off" },
+  { id: "you", doing: "Signs off", name: "Human desk", color: "--you", step: "Signs off" },
   { id: "disc", name: "Discovery", color: "--discovery", step: "Steps 1–2" },
   { id: "eng", name: "Engineering", color: "--engineering", step: "Step 3" },
   { id: "rev", name: "Review gate", color: "--review", step: "Step 4" },
 ];
 const AGENTS = [
-  { id: "orchestrator", name: "Orchestrator", room: "cmd", ini: "OR",
+  { id: "orchestrator", doing: "Checks off the plan", name: "Orchestrator", room: "cmd", ini: "OR",
     role: "Runs the loop. Sets one measurable goal per cycle, assigns work, collects reports and decides pass or fail.",
     owns: "The cycle and the decision log", reads: "insights.md, decisions.md, every agent's report", writes: "decisions.md, reports/cycle-N/",
     block: false, gates: "Never approves legal, pricing, safety or shipping. Those go to you." },
   { id: "you", name: "You (owner)", room: "you", ini: "YOU",
     role: "Approves what agents may not: legal and Uber terms questions, pricing, shipping to drivers, and any change to the safety rule.",
     owns: "Final sign-off", reads: "Waiting on you list, cycle summaries", writes: "Ticks in human_gates.md, notes to the team", block: true, gates: "Your word is final." },
-  { id: "research", name: "Research", room: "disc", ini: "RE",
+  { id: "research", doing: "Searches for evidence", name: "Research", room: "disc", ini: "RE",
     role: "Turns driver interviews, pilot feedback, competitor apps and Uber screen changes into evidence.",
     owns: "Evidence", reads: "research/, eval_set/ pilot cases, public sources", writes: "insights.md", block: false, gates: "Never invents quotes or numbers." },
-  { id: "product-spec", name: "Product / Spec", room: "disc", ini: "PS",
+  { id: "product-spec", doing: "Drafts the next spec", name: "Product / Spec", room: "disc", ini: "PS",
     role: "Turns insights into a short prioritised spec with one measurable goal. Owns hands-free and safety design.",
     owns: "Scope, goal, safety design", reads: "insights.md, decisions.md, SAFETY.md", writes: "spec.md, goal.json", block: false, gates: "Can't edit the safety rule." },
-  { id: "growth", name: "Growth", room: "disc", ini: "GR",
+  { id: "growth", doing: "Grows the driver base", name: "Growth", room: "disc", ini: "GR",
     role: "Finds drivers, keeps them coming back and tests whether they'll pay, using real numbers only.",
     owns: "Funnel: reached → tried → returned → paid", reads: "Owner view exports, feedback, unit-economics.md", writes: "reports/cycle-N/growth.md", block: false, gates: "Pricing and public posts go to you." },
-  { id: "scan-engineer", name: "Scan Engineer", room: "eng", ini: "SE",
+  { id: "scan-engineer", doing: "Tunes the screenshot reader", name: "Scan Engineer", room: "eng", ini: "SE",
     role: "Builds the screenshot reader and its manual-entry fallback. Numbers only, never rider names or addresses.",
     owns: "fairfare/parser.py", reads: "eval_set/, failing scans", writes: "Parser code, scan accuracy report", block: false, gates: "A wrong number is worse than a missing one." },
-  { id: "verdict-modeler", name: "Verdict Modeler", room: "eng", ini: "VM",
+  { id: "verdict-modeler", doing: "Weighs the pay maths", name: "Verdict Modeler", room: "eng", ini: "VM",
     role: "Estimates take-home per hour and per mile as a range with confidence, calibrated on real trips.",
     owns: "fairfare/verdict.py", reads: "Logged trip outcomes", writes: "Median and 90th-percentile error report", block: false, gates: "Flags any change that makes error worse." },
-  { id: "builder", name: "Builder", room: "eng", ini: "BU",
+  { id: "builder", doing: "Builds app features", name: "Builder", room: "eng", ini: "BU",
     role: "Builds app features from the spec: screens, text, storage, the 26 languages.",
     owns: "The app (app/)", reads: "spec.md, SAFETY.md", writes: "Code on a cycle branch", block: false, gates: "Never ships. A human publishes." },
-  { id: "backend-engineer", name: "Backend Engineer", room: "eng", ini: "BE",
+  { id: "backend-engineer", doing: "Keeps the servers fed", name: "Backend Engineer", room: "eng", ini: "BE",
     role: "Runs the live event feed and the automated pipeline, and builds the shared backend for phase 2.",
     owns: "fetch_events.py, workflows, store.js", reads: "Provider docs, ops reports", writes: "reports/cycle-N/backend.md", block: false, gates: "Official APIs only. Secrets never in code." },
-  { id: "qa-red-team", name: "QA / Red Team", room: "rev", ini: "QA",
+  { id: "qa-red-team", doing: "Hunts for bugs", name: "QA / Red Team", room: "rev", ini: "QA",
     role: "Tries to break FairFare: blurred screenshots, odd layouts, extreme offers, anything needing phone use while driving.",
     owns: "Finding failures", reads: "The whole app", writes: "reports/cycle-N/qa.md", block: true, gates: "Reports, never fixes." },
-  { id: "privacy-compliance", name: "Privacy", room: "rev", ini: "PR",
+  { id: "privacy-compliance", doing: "Guards driver data", name: "Privacy", room: "rev", ini: "PR",
     role: "Checks every data flow against UK GDPR, retention and redaction, and flags Uber terms risk.",
     owns: "Personal data", reads: "Code, eval_set/, data flows", writes: "reports/cycle-N/privacy.md", block: true, gates: "Advises. A human or solicitor decides." },
-  { id: "economics", name: "Economics", room: "rev", ini: "EC",
+  { id: "economics", doing: "Counts the pennies", name: "Economics", room: "rev", ini: "EC",
     role: "Tracks cost per scan, margin per driver and price-test results.",
     owns: "unit-economics.md", reads: "economics.json, real price tests", writes: "reports/cycle-N/economics.md", block: true, gates: "Never changes the price." },
-  { id: "ops-reliability", name: "Ops & Reliability", room: "rev", ini: "OP",
+  { id: "ops-reliability", doing: "Watches the heartbeat", name: "Ops & Reliability", room: "rev", ini: "OP",
     role: "Checks the system is healthy: pipeline runs, published app, event feed freshness, errors. Writes incident notes.",
     owns: "Service health", reads: "GitHub Actions runs, live site, events.json", writes: "reports/cycle-N/ops.md", block: true, gates: "Reports only. A feed over 24 hours old blocks." },
 ];
 const byId = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+
+// ---------- robots: each one is drawn doing its own job ----------
+// viewBox 0 0 120 110: desk top at y=80, robot in the middle, monitor on the left, role prop on the right.
+const MONITOR = `<g><rect class="mon" x="5" y="50" width="31" height="23" rx="3"/><rect class="scr" x="8" y="53" width="25" height="17" rx="1.5"/>
+  <g class="scrl"><rect class="acc" x="11" y="56" width="14" height="2" rx="1"/><rect class="acc" x="11" y="60" width="19" height="2" rx="1" opacity=".6"/><rect class="acc" x="11" y="64" width="10" height="2" rx="1" opacity=".8"/></g>
+  <rect class="dl" x="18" y="73" width="5" height="7"/></g>`;
+const PROPS = {
+  orchestrator: `<g><rect class="paper" x="86" y="46" width="20" height="26" rx="2"/><rect class="dl" x="92" y="43" width="8" height="5" rx="1.5"/>
+    <path class="accs p-tick" d="M90 54l3 3 5-6"/><path class="accs p-tick" d="M90 64l3 3 5-6" style="animation-delay:1.2s"/></g>`,
+  research: `<g class="p-sweep"><circle class="ink" cx="99" cy="56" r="8"/><circle class="scr" cx="99" cy="56" r="6" opacity=".7"/><path class="ink" d="M105 62l7 8"/></g>`,
+  "product-spec": `<g><rect class="paper" x="84" y="72" width="30" height="8" rx="1"/><path class="accs" d="M88 76h18" opacity=".7"/>
+    <g class="p-write"><path class="ink" d="M104 56l-12 16"/><path d="M92 72l-2 4 4-2z" fill="var(--ink)"/></g></g>`,
+  growth: `<g><rect class="dl" x="92" y="70" width="14" height="10" rx="2"/><g class="p-grow"><path class="accs" d="M99 70v-14"/>
+    <ellipse class="acc" cx="94" cy="60" rx="5" ry="2.6" transform="rotate(-30 94 60)"/><ellipse class="acc" cx="104" cy="56" rx="5" ry="2.6" transform="rotate(30 104 56)"/></g></g>`,
+  "scan-engineer": `<g><rect class="mon" x="90" y="48" width="17" height="30" rx="3"/><rect class="scr" x="92" y="51" width="13" height="24" rx="1"/>
+    <rect class="acc p-beam" x="91" y="52" width="15" height="2" rx="1"/></g>`,
+  "verdict-modeler": `<g><path class="ink" d="M99 46v32M92 78h14"/><g class="p-tilt"><path class="ink" d="M86 50h26"/>
+    <path class="accs" d="M86 50l-3 8h6zM112 50l-3 8h6z"/></g></g>`,
+  builder: `<g><rect class="dl" x="96" y="72" width="10" height="8"/><rect class="dl" x="107" y="72" width="10" height="8"/><rect class="dl" x="101" y="64" width="10" height="8"/>
+    <g class="p-spin"><path class="ink" d="M90 64l14-12"/><circle class="ink" cx="106" cy="50" r="4"/></g></g>`,
+  "backend-engineer": `<g><rect class="mon" x="92" y="36" width="24" height="44" rx="2"/>
+    ${[42, 52, 62, 72].map((y, i) => `<rect class="dl" x="95" y="${y}" width="18" height="6" rx="1"/><circle class="acc p-led ${"abc"[i % 3]}" cx="110" cy="${y + 3}" r="1.6"/>`).join("")}</g>`,
+  "qa-red-team": `<g><g class="p-crawl"><ellipse cx="108" cy="77" rx="4" ry="3" fill="var(--blocked)"/><path class="ink" d="M104 75l-3-2M104 79l-3 2M112 75l3-2M112 79l3 2" stroke-width="1.4"/></g>
+    <circle class="ink" cx="96" cy="58" r="7"/><path class="ink" d="M101 63l5 6"/></g>`,
+  "privacy-compliance": `<g class="p-pulse"><path d="M99 44l12 4v10c0 9-6 14-12 17-6-3-12-8-12-17V48z" class="acc" opacity=".9"/>
+    <rect x="94" y="56" width="10" height="8" rx="1.5" fill="var(--sheet)"/><path d="M96 56v-3a3 3 0 0 1 6 0v3" stroke="var(--sheet)" stroke-width="2" fill="none"/></g>`,
+  economics: `<g>${[0, 1, 2].map((i) => `<ellipse cx="100" cy="${77 - i * 4}" rx="8" ry="2.6" fill="var(--working)" stroke="var(--ink)" stroke-width=".8"/>`).join("")}
+    <g class="p-coin"><circle cx="100" cy="56" r="6" fill="var(--working)" stroke="var(--ink)" stroke-width="1"/><text x="100" y="59" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ink)">£</text></g></g>`,
+  "ops-reliability": `<g><rect class="mon" x="85" y="46" width="31" height="23" rx="3"/><rect class="scr" x="88" y="49" width="25" height="17" rx="1.5"/>
+    <path class="accs p-beat" d="M89 58h5l2-5 3 10 3-8 2 3h7"/><rect class="dl" x="98" y="69" width="5" height="11"/></g>`,
+};
+
+function robot(a, s) {
+  if (a.id === "you") {
+    return `<svg class="bot-svg" viewBox="0 0 120 110" role="img" aria-label="Your desk">
+      <rect class="dt" x="2" y="80" width="116" height="7" rx="2"/><rect class="dl" x="8" y="87" width="4" height="18"/><rect class="dl" x="108" y="87" width="4" height="18"/>
+      <rect class="paper" x="20" y="70" width="34" height="10" rx="1"/><path class="accs" d="M25 75h20" opacity=".6"/>
+      <g class="p-stamp"><rect class="body" x="66" y="52" width="8" height="12" rx="2"/><rect class="body" x="60" y="64" width="20" height="6" rx="1.5"/></g>
+      <rect x="58" y="74" width="24" height="6" rx="1" fill="none" stroke="var(--rc)" stroke-width="1.5"/><text x="70" y="79" text-anchor="middle" font-size="4.6" font-weight="700" fill="var(--rc)">APPROVED</text>
+      <path d="M86 46h20v22H86z" class="paper"/><path class="ink" d="M90 54h12M90 60h8" stroke-width="1.5"/>
+      <circle class="ant" data-s="${s}" cx="96" cy="40" r="3.5"/></svg>`;
+  }
+  return `<svg class="bot-svg" viewBox="0 0 120 110" role="img" aria-label="${esc(a.name)} robot at work">
+    ${MONITOR}
+    <g class="bot">
+      <path class="ink" d="M60 18V10"/><circle class="ant" data-s="${s}" cx="60" cy="7" r="3.5"/>
+      <rect class="body" x="40" y="18" width="40" height="30" rx="10"/>
+      <rect class="visor" x="45" y="25" width="30" height="14" rx="6"/>
+      <g class="eyes"><circle class="eye" cx="54" cy="32" r="2.7"/><circle class="eye" cx="66" cy="32" r="2.7"/></g>
+      <rect class="body" x="56" y="47" width="8" height="5"/>
+      <rect class="body" x="44" y="51" width="32" height="28" rx="8"/>
+      <rect class="visor" x="53" y="58" width="14" height="8" rx="2"/><circle class="ant" data-s="${s}" cx="60" cy="62" r="1.8"/>
+      <path class="arm armL" d="M46 58 Q38 66 34 77"/>
+      <path class="arm armR" d="M74 58 Q82 62 88 64"/>
+    </g>
+    ${PROPS[a.id] || ""}
+    <rect class="dt" x="2" y="80" width="116" height="7" rx="2"/><rect class="dl" x="8" y="87" width="4" height="18"/><rect class="dl" x="108" y="87" width="4" height="18"/>
+  </svg>`;
+}
 const roomOf = (a) => ROOMS.find((r) => r.id === a.room);
 
 // ---------- state ----------
@@ -232,8 +344,10 @@ function renderPlan() {
       <div class="rname"><span class="label">${esc(r.name)}</span><span class="step">${esc(r.step)}</span></div>
       <div class="desks">${AGENTS.filter((a) => a.room === r.id).map((a) => `
         <button class="desk" data-id="${a.id}" aria-pressed="${a.id === selected}" style="--rc:var(${r.color})">
-          <span class="top"><span class="avatar">${esc(a.ini)}</span><span class="nm">${esc(a.name)}</span></span>
+          ${robot(a, stateOf(a.id))}
+          <span class="nm">${esc(a.name)}</span>
           <span class="st"><i class="dot" data-s="${stateOf(a.id)}"></i>${esc(wordOf(a.id))}</span>
+          <span class="task">${esc(a.id === "you" ? (gates.filter((g) => g.state !== "done").length + " waiting on you") : ((status[a.id] || {}).task || a.doing))}</span>
           ${a.block && a.id !== "you" ? `<span class="badge">Can block</span>` : ""}
         </button>`).join("")}</div>
     </div>`).join("");
@@ -249,7 +363,7 @@ function renderDetail() {
   el.style.setProperty("--rc", `var(${r.color})`);
   el.innerHTML = `
     <div class="row" style="justify-content:space-between">
-      <div class="row"><span class="avatar">${esc(a.ini)}</span><div><div class="label">${esc(r.name)}</div><h2>${esc(a.name)}</h2></div></div>
+      <div class="row"><div class="head-bot">${robot(a, stateOf(a.id))}</div><div><div class="label">${esc(r.name)}</div><h2>${esc(a.name)}</h2></div></div>
       <span class="st label" style="display:flex;gap:6px;align-items:center"><i class="dot" data-s="${stateOf(a.id)}"></i>${esc(wordOf(a.id))}</span>
     </div>
     <p style="margin:0">${esc(a.role)}</p>
