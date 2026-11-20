@@ -252,20 +252,59 @@ function fitWord() {
 window.addEventListener("resize", fitWord);
 
 let tesseractLoading = null;
+// The OCR engine is served from FairFare's own site (app/vendor/tesseract): no third-party host is contacted.
+const OCR_BASE = () => new URL("vendor/tesseract/", location.href).href;
 function loadTesseract() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
   tesseractLoading ??= new Promise((ok, fail) => {
     const sc = document.createElement("script");
-    sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    sc.src = OCR_BASE() + "tesseract.min.js";
     sc.onload = () => ok(window.Tesseract);
     sc.onerror = () => { tesseractLoading = null; fail(new Error("load")); };
     document.head.appendChild(sc);
   });
   return tesseractLoading;
 }
+let ocrWorker = null;
+async function getOcrWorker() {
+  const T = await loadTesseract();
+  if (!ocrWorker) {
+    const base = OCR_BASE();
+    ocrWorker = T.createWorker("eng", 1, {
+      workerPath: base + "worker.min.js", corePath: base, langPath: base + "lang", workerBlobURL: false,
+    }).catch((e) => { ocrWorker = null; throw e; });
+  }
+  return ocrWorker;
+}
 
 // Screenshot is read on the phone; the image is never uploaded or stored.
 // file: a File or Blob from the picker, paste, drop or share target.
+// Make a screenshot easy to read: greyscale, dark mode flipped to dark-on-light, then pure black and white.
+// Stays in memory on the phone; nothing is saved or sent.
+function prepareForOcr(bmp, scale) {
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * scale));
+  c.height = Math.max(1, Math.round(bmp.height * scale));
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.drawImage(bmp, 0, 0, c.width, c.height);
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const a = img.data;
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const g = 0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2];
+    a[i] = g; sum += g;
+  }
+  const dark = sum / (a.length / 4) < 128;
+  for (let i = 0; i < a.length; i += 4) {
+    let g = a[i];
+    if (dark) g = 255 - g;
+    g = g < 140 ? 0 : 255;
+    a[i] = a[i + 1] = a[i + 2] = g;
+  }
+  x.putImageData(img, 0, 0);
+  return c;
+}
+
 async function scanImage(file) {
   if (!file) return;
   if (checkMode !== "scan") setMode("scan");
@@ -287,9 +326,18 @@ async function scanImage(file) {
   $("#scan-status").textContent = t("check.scanning");
   updateCheck();
   try {
-    const T = await loadTesseract();
-    const { data } = await T.recognize(file, "eng");
-    const text = (data.text || "").slice(0, MAX_TEXT);
+    const worker = await getOcrWorker();
+    const bmp = await createImageBitmap(file);
+    // Pass 1: full size, cleaned to black-on-white, read as scattered text (an offer card isn't prose).
+    await worker.setParameters({ tessedit_pageseg_mode: "11" });
+    let text = ((await worker.recognize(prepareForOcr(bmp, 1))).data.text || "").slice(0, MAX_TEXT);
+    // Pass 2, only if something is missing: half size, read as a page. Keep whichever found more.
+    if (parseOfferText(text).missing.length) {
+      await worker.setParameters({ tessedit_pageseg_mode: "3" });
+      const alt = ((await worker.recognize(prepareForOcr(bmp, 0.5))).data.text || "").slice(0, MAX_TEXT);
+      if (parseOfferText(alt).missing.length < parseOfferText(text).missing.length) text = alt;
+    }
+    if (bmp.close) bmp.close();
     if (parseOfferText(text).missing.length === 5) finish("failed");
     else finish(null, text);
   } catch {

@@ -72,7 +72,7 @@ def test_scan_clears_old_verdict_and_drops_stale_results():
     scan = app[app.index("async function scanImage"):app.index("function saveOffer")]
     assert "++scanSeq" in scan and "my !== scanSeq" in scan, "stale OCR results must be ignored"
     reading = scan.index('scanState = "reading"')
-    assert reading < scan.index("updateCheck()", reading) < scan.index("loadTesseract()"), \
+    assert reading < scan.index("updateCheck()", reading) < scan.index("getOcrWorker()"), \
         "the old verdict must be cleared before OCR starts"
     assert 'finish("failed")' in scan
     body = app[app.index("function updateCheck"):]
