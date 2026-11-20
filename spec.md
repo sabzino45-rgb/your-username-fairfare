@@ -1,6 +1,101 @@
 # Spec
 
-_Owned by product-spec. Rewritten each cycle._
+_Owned by product-spec. Rewritten each cycle. Newest cycle first; cycle 1 and v0 are kept below for history._
+
+## Goal for cycle 2 (v1.1): never take a stray amount as the fare, and stop refusing readable cards
+
+**Why this cycle:** cycle 1 failed (decisions.md, 2026-11-20). On QA's third set of unseen made-up cards, when OCR dropped the card's own fare line, a bare £ amount above the product label (an Uber Pro earnings pill g01, a Starling balance g11, a pill in Spanish g16) was taken as the fare and gave a false ACCEPT. The cautious "conflict means None" rule that protects other screens sent 7 of 15 readable unseen cards (47%) to manual entry. Both come from the same weakness: the reader looks for the fare by distance from the legs, not by where it sits on the card. The owner chose to run cycle 2 now, with a tighter reading rule and no real Uber screenshots yet.
+
+**Scope:** the screenshot reader only: fairfare/parser.py and app/js/engine.js, kept identical (tests/test_js_parity.py), plus the eval metrics and cases that measure it. No UI, verdict-model or app changes.
+
+**Gated metric (tools/gate.py, reports/cycle-2/goal.json):**
+
+```
+wrong_number_count <= 0
+```
+
+measured by `python tools/run_eval.py --save reports/cycle-2/eval.json` on the judged side (synthetic today), on all eval files **including the new fare-zone cases from R2**. `wrong_number_count` is new (R2 defines it). Today it is 0 on the 92 existing cases, so R2's new cases must be written first and an eval saved that shows it above 0 under the cycle-1 rules (`reports/cycle-2/eval_fare_zone_before.json`). If that before-eval shows 0, the cases don't test the failure and must be fixed before any parser change.
+
+Why this metric and not scan_accuracy_overall: accuracy counts a refusal (None) and a wrong number the same, and averages them over 5 fields and ~100 cases, so 3 false ACCEPTs barely move it (1.00 to about 0.994, still past cycle 1's 0.99 goal). A wrong number is the harm that matters; a refusal is a usability cost. The gate is a count, so one wrong number fails it.
+
+**Must also hold (QA checks; scan-engineer reports in scan.md):**
+- `readable_manual_rate <= 0.02` on the judged side (new metric, R2). Today 0 of the 73 readable eval cards go to manual entry; R2 adds readable cards with stray amounts that the cycle-1 rules refuse, so the before-eval should show a rise and the fix must bring it back down.
+- `false_accept_count` = 0 (new metric, R2; implied by the goal, reported separately because it is the safety-relevant subset).
+- `run_eval.py --baseline reports/cycle-2/eval_before.json` exits 0. All per-case rows of the original 60 cases are unchanged; manual_fallback_rate on them stays 0.15. verdict median/p90 error unchanged.
+
+**Acceptance criteria on QA's own brand-new unseen cards (the real check; QA can block):**
+QA writes a fourth fresh set the scan-engineer has not seen: at least 20 cards, at least 15 of them readable (all 5 fields readable by a person). It must include at least 6 cards whose fare line is missing with a bare £ amount above the product label (with labels and pill wording not in any list the parser uses, e.g. other bank apps, non-English pills), at least 3 cards with no product label at all, at least 4 readable cards with a second £ amount outside the fare zone (bank push, tip, earnings, promo, rider-price line above the card), and at least 2 cards that mix both. At least 10 are also drawn as images and run through the app's real OCR in light and dark mode.
+1. **Zero wrong numbers that lead to a false ACCEPT**, text level and real OCR: no card where the app shows ACCEPT and the verdict for the card's true numbers is MARGINAL, DECLINE or CAN'T TELL. Any other wrong number is reported with its severity; a wrong fare that changes the verdict word is High.
+2. **Manual-entry rate on readable cards <= 20%** at text level (at most 3 of 15), and <= 25% on the real-OCR scans of readable cards (OCR loses lines on its own). Justification: of cycle 1's 7 refusals on 15 readable cards, 4 (g02, g18, g19, g20) were caused only by a second amount outside the card, which the fare zone ignores; that leaves 3 of 15 (20%): one OCR garble ("1 .8 mi"), one ambiguous layout ("Rider pays … You earn …") and one badge ("£12.40 Fixed"). Refusing a real OCR garble is correct, so 0% is not the target; 20% is what the rule should reach without guessing. Going lower than that means guessing, which this cycle does not ask for.
+3. Python and JS give identical results on every QA card.
+
+All figures are synthetic or drawn imitations and say nothing about real Uber screenshots; scan.md and qa.md must say so.
+
+## Requirements (cycle 2, priority order)
+
+### R1. Read the fare only from the card's fare zone (owner: scan-engineer)
+
+Replace "nearest bare amount above the legs, with conflict-means-None" with a structural rule, in fairfare/parser.py and app/js/engine.js together.
+
+- **Product label.** A line is a product-label line if, after trimming punctuation and "·" separators, it is made only of ride-type names and badges from one shared list (case-insensitive): UberX, UberXL, XL, Comfort, Comfort Electric, Green, Exec, Executive, Lux, Black, Pet, Uber Pet, Access, Assist, WAV, Exclusive, Priority, Share, Electric, Taxi, Uber X Share; a fare amount may follow on the same line ("UberX £12.40"). The list is a guess at real layouts and lives in one constant in each engine. The anchor is the **last** product-label line above the first leg line.
+- **Fare zone, with a label.** The fare may come only from (a) the lines strictly between the anchor label and the first leg line, (b) the anchor label line itself, and (c) the Accept-button line below the legs, inside the card. Exactly one distinct card-fare-shaped amount there is the fare. Zone and Accept amounts that differ give None (`fare_ambiguous`), as do two amounts in the zone. No amount in the zone or on the Accept line gives None (`fare_missing`): **never look above the label**. A garbled money line in the zone gives None (`fare_unreadable`), as now.
+- **Outside the zone is never a fare, and never a conflict.** Any £ amount above the anchor label, or outside the card (after the Accept line, or past the start of a second offer), is ignored entirely. It does not trigger `fare_ambiguous`. This is what removes the needless refusals (cycle-1 g02, g18, g19, g20 patterns).
+- **No product label found.** Fall back to the cycle-1 rules (4 non-blank lines above the legs, card-fare-shaped, conflict means None, Accept line), with one extra cut-off: the window stops at, and excludes everything above, the nearest line that is not card text: a status-bar line (clock, battery %, network), a notification header ("App · now", "Monzo", "Starling Bank"), a status/pill label (online, earnings, Uber Pro, today), or any line of ordinary words. An amount above any such line is never a fare.
+- Multi-offer screens (Trip Radar, a second card cut off) keep their current refusals. The leg, surge and rating rules are unchanged. Optional, only if the scan-engineer judges it safe: inside the zone, allow a short trailing badge word ("Fixed", "Upfront"); outside the zone nothing changes.
+
+Acceptance criteria:
+1. The cycle-1 failures g01, g11, g16 (qa_probes/fresh_cases_3.jsonl, now seen) give fare None; g02, g18, g19, g20 give the true fare. Re-written versions of them may go into R2's eval file.
+2. The gated goal and the "must also hold" list above are met; `python -m pytest -q` passes, JS parity included.
+3. reports/cycle-2/scan.md gives before/after numbers for all new metrics, lists every assumption about real layouts, and says plainly the numbers are synthetic.
+
+### R2. Measure wrong numbers and needless refusals, and add fare-zone cases (owner: scan-engineer)
+
+**tools/run_eval.py** gains three metrics in `evaluate()`, so each appears in both the `pilot` and `synthetic` blocks of eval.json (the gate reads the judged side), and in the printed summary line:
+- `wrong_number_count` (int): the number of cases where at least one REQUIRED field is wrong, i.e. the parser returned a non-null value and `field_ok` is false for it (expected null but a value given, or outside TOLERANCE). Refusals (got None) never count.
+- `false_accept_count` (int): cases where the parsed verdict is ACCEPT and the verdict for the true numbers is not ACCEPT. The true verdict is `estimate(Offer(**{f: expected_fields.get(f) for f in REQUIRED}), DriverProfile(**profile))`, so an expected null field gives UNKNOWN.
+- `readable_manual_rate` (float, 4 dp) and `readable_n` (int): among cases whose expected_fields has all 5 REQUIRED fields non-null, the share where `offer.missing` is non-empty. None if `readable_n` is 0.
+- Per-case rows gain `wrong_fields` (list of field names) and `true_decision`. The `--baseline` regression check also fails if `wrong_number_count` or `false_accept_count` rises. Existing metrics and their values do not change.
+- A pytest covers the three metrics on a tiny hand-made case list (one wrong fare, one refusal, one false ACCEPT).
+
+**New eval file** eval_set/synthetic_fare_zone.jsonl (`"origin": "synthetic"`, `"kind": "fare_zone"`, ids syn-fz-001 up), written and evaluated **before** any parser change, at least 20 cases:
+- at least 8 with the card's fare line missing and a bare £ amount above the product label (varied pill, bank, tip and non-English wording, not only words the parser lists); expected fare null, legs filled;
+- at least 8 readable cards with a second £ amount outside the fare zone (above the label or below the card); expected fare = the card's fare;
+- at least 4 with no product label: 2 where the only amount sits above a status-bar or notification line (fare null), 2 readable (fare filled).
+Save `reports/cycle-2/eval_fare_zone_before.json` with the cycle-1 parser; it must show `wrong_number_count > 0` and `readable_manual_rate` above its value in eval_before.json. The existing eval files stay byte-identical.
+
+Acceptance criteria:
+1. eval.json has the three metrics on both sides; `python tools/gate.py 2` reads `wrong_number_count` from it.
+2. The before-eval file exists and shows both effects; scan.md quotes it.
+3. pytest passes.
+
+## Out of scope (cycle 2)
+
+- Any UI change: verdict card, Details, history, settings, languages, the Low items QA left open (shift chips, Tamil 12px scroll, `MAX_TEXT`, £999 manual entry). The builder has no requirement this cycle.
+- Share target, paste/drop, service worker, OCR engine and image clean-up: unchanged.
+- Native Android app, live capture, split screen, Accessibility overlay: still waiting on the cycle-1 legal gate.
+- Spoken verdict, verdict model changes, backend, pricing, recruitment.
+- OCR-garble repair ("rnins" to "mins", "£ 12 .40", "1 .8 mi") and the "Rider pays … You earn …" layout: refusing these stays correct until real screenshots show what they look like.
+- Real Uber screenshots: none exist yet. The next step that matters is still 10-20 real, redacted ones (decisions.md).
+
+## Safety and hands-free review (cycle 2)
+
+| Req | Rule (SAFETY.md) | How it complies |
+|---|---|---|
+| R1 fare zone | One glanceable word and colour while moving; no numbers to read. | No UI change: the driver still sees one word. The rule makes that word more trustworthy: a stray amount can no longer become the fare, so a false ACCEPT from screen noise is removed. When the zone has no fare, the answer is CAN'T TELL, not a guess. |
+| R1 fewer refusals | Manual entry only when parked. | Every needless refusal sends the driver to manual entry, which is parked-only typing. Cutting refusals on readable cards means fewer cases where the driver has to stop and type. The rule never guesses to lower that rate: refusals for garbled or ambiguous fares stay. |
+| R1 | FairFare never accepts or declines offers. | Unchanged; the reader only reads text from an image the driver chose to send. |
+| R2 metrics and cases | (none directly) | Eval tooling only, no driver-facing change. It makes wrong numbers, the safety-relevant failure, a hard gate. |
+
+No requirement changes SAFETY.md, and none needs a change to it.
+
+## Human gates triggered (cycle 2)
+
+Added to reports/cycle-2/human_gates.md (cycle 1's 21 open items still apply):
+- Product/Shipping: owner confirms the fare-zone layout assumption (label above fare above legs; an Accept-button amount is the offer's fare) against at least 10 real, redacted offer screenshots before the cycle-2 reader ships to any driver.
+
+---
+
+# Cycle 1 (history)
 
 ## Current version: v0 (baseline)
 
