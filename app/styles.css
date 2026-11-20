@@ -6,9 +6,10 @@
   --go: #4fc48a; --go-bg: #12301f; --wait: #f2b443; --wait-bg: #33270e; --stop: #ff7b70; --stop-bg: #3a1916;
   --unk: #98a5a0; --unk-bg: #1f2725;
   --heat0: #1c2321; --heat1: #1e3a2c; --heat2: #2e6b4a; --heat3: #4fc48a;
-  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
-  --body: "Inter", system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* System fonts only: no web-font requests (privacy: no driver IP sent to a font host) */
+  --display: "Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", "Sans Narrow", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
@@ -127,6 +128,8 @@ body.dropping .view { outline: 3px dashed var(--accent); outline-offset: 4px; bo
 
 /* Demand */
 .level { font: 700 34px/1 var(--display); }
+/* Condensed where the system has it (the font shorthand resets font-stretch, so set it after) */
+.wordmark, h1, .word, .level { font-stretch: condensed; }
 .heat-wrap { overflow-x: auto; }
 .heat { display: grid; grid-template-columns: 44px repeat(5, minmax(40px, 1fr)); gap: 6px; min-width: 300px; font-size: 11px; color: var(--muted); }
 .heat .h { text-align: center; font-family: var(--mono); }

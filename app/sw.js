@@ -1,5 +1,5 @@
 // Offline support: cache the app shell so FairFare opens with no signal.
-const CACHE = "fairfare-v2";
+const CACHE = "fairfare-v3";
 const SHELL = ["./", "index.html", "styles.css", "manifest.webmanifest", "icons/icon.svg",
   "js/app.js", "js/engine.js", "js/demand.js", "js/southwest.js", "js/i18n.js", "js/store.js", "lang/en.json"];
 
