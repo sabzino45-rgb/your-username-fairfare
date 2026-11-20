@@ -317,3 +317,108 @@ The cases cover:
 - The real clipboard permission prompt.
 - Upgrading an installed v1–v3 to v4.
 - Real phone fonts.
+
+---
+
+## Attempt 3 re-test (2026-11-20)
+
+**STATUS: BLOCK** (narrow). Every High item is fixed and every attempt-2 failure is fixed. The block comes from one new failure mode in the third fresh set: the parser takes a stray bare amount as the fare when the card's own fare line is missing from the OCR text, and that turns into ACCEPT.
+
+**Code under test:**
+- parser.py and engine.js (18:25), app.js (18:18), sw.js `fairfare-v4`, self-hosted OCR.
+- `pytest -q`: 66 passed.
+- `run_eval --baseline reports/cycle-1/eval_before.json`: no regression. Synthetic only.
+- Python vs JS: 0 differences on 41 adversarial texts plus 41 fresh texts.
+- Real OCR through the app (`ocr_fresh3.js`, served on port 8773, server stopped afterwards): 0 requests left the origin and the page logged no errors.
+
+### 1. Attempt-2 failures
+
+| Item | Text level (both engines) | Real OCR, light and dark (`ocr_a3_regress.json`) | Result |
+|---|---|---|---|
+| f05 "1h20min" | trip 80 min, MARGINAL. Hour mode and the £44 fare give MARGINAL too, the same as the truth | 80 min, MARGINAL | **fixed** |
+| f08 PayPal line + "€9.60" | fare None (`fare_unreadable`) | None | **fixed** |
+| f16 earnings pill + "Accept £10.20" | fare 10.20, the true fare (MARGINAL in the app) | 10.20, MARGINAL | **fixed**. The number is right; my old expected value of None was conservative. |
+| Blank lines in Tesseract output (f15) | `"…£16.85\n\n+£4.10 surge\n\n4.89 x\n\n3 mins…"` gives 16.85 | 16.85, ACCEPT, the same as the truth | **fixed** |
+| Manual entry with a 0-minute leg and 12 miles | UNKNOWN (`zero_minute_leg`) | n/a | **fixed** |
+
+**UI checks on the final app.js:** stale verdict, failed read, no-offer image and rapid pastes all pass.
+- I re-tested rapid pastes with a stub that picks its text by image size (`rapid_a3.js`). The newest paste wins in all 3 timing orders.
+- An earlier stub that picked its text by call order failed once. That failure came from the stub, not the app: the app now reuses one OCR worker, so the call order can differ from the paste order.
+
+**Still open (Low):**
+- The shift-goal chips (£200/£300/£400) sit above the fold.
+- At 320px, Tamil's tab bar scrolls the page 12px sideways.
+- `MAX_TEXT` cuts texts longer than 5000 characters.
+- Manual entry still accepts £999 for 7 miles.
+
+### 2. Third fresh set (`qa_probes/fresh_cases_3.jsonl`, 20 cards, not in eval_set)
+
+The new variations:
+- Notifications: Uber Pro, Monzo, Starling and tip lines with a bare amount alone on its line.
+- A fare line lost by OCR.
+- Fare layouts: two amounts on the fare line, "Rider pays … You earn …", and "Accept · £15.60" as the only fare.
+- Trip lengths: 2 hrs 45 mins / 162 mi, and 2 min / 0.6 mi.
+- Units and spacing: km and mi mixed with no spaces, comma decimals with km, a space inside a leg decimal ("1 .8 mi").
+- OCR noise: "£12.40 Fixed", a second offer cut off below the first, a Spanish "En línea" pill, dark-mode O/I noise.
+- Two fares drawn as white text on a green badge (image test only).
+
+**Text level:**
+
+| field | correct | missed (None, but readable) | **wrong** |
+|---|---|---|---|
+| fare | 11 | 4 | **3** |
+| pickup / trip fields | 17–18 | 0–1 | 0 |
+
+g10 (the cut-off second offer) is counted as correct. Its legs are the first card's real legs, and the fare is refused because a second fare is on screen.
+
+**Wrong numbers that become ACCEPT (the block):**
+
+| case | text | parsed | should be | verdict |
+|---|---|---|---|---|
+| **g01** | `10:15 5G 70%` / `£58.40` / `Uber Pro · Gold` / `UberX` / `4.90 ★` / `6 mins (2.1 mi) away` / `24 mins (9.8 mi) trip` | fare **58.40**, the earnings pill | None: the card shows no fare | **ACCEPT**. At a typical £14.20 it would be MARGINAL. |
+| **g11** | `Starling Bank` / `£120.00` / `Salary from ACME LTD` / `UberX` / `4.87 ★` / legs (7 min / 2.5 mi, 38 min / 17.4 mi) | fare **120.00** | None | **ACCEPT**. At a typical £19.60 it would be DECLINE. |
+| **g16** | `£64.90` / `En línea` / `UberX` / `4.91 ★` / legs | fare **64.90** | None | **ACCEPT**. At a typical £11.00 it would be MARGINAL. |
+
+- **Cause:** if no card fare is found, the nearest bare £ line within 4 non-blank lines above the legs is used, even when a ride-type line ("UberX") sits between that amount and the legs.
+- **Why the other cases are safe:**
+  - Only listed pill labels are excluded, so "Uber Pro · Gold", "Salary from", "En línea" and other languages get through.
+  - The conflict rule only protects when the real fare is also on screen (g02, g18, g19, g20 then give None).
+- **Real OCR:** g01 and g11 drawn as images with the fare line left out give the same wrong ACCEPT, in light and dark mode (`ocr_a3_fresh.json`).
+- **Severity: high.** This is a wrong ACCEPT, so the block rule applies.
+- **How likely:** it needs OCR to lose the card's largest text line while keeping a small amount above it. I couldn't make that happen naturally.
+  - With the fare drawn white on a green badge (g19, g20), OCR lost the fare and also the plain-text amount above it, so the result was None, which is safe.
+  - The real Uber earnings pill is white on black, so it is the more likely line for OCR to lose.
+- I'd put this as unlikely but possible. The owner may accept the risk; I can't under the rule.
+- **Possible general fix:** never take a fare from above the card's ride-type line. Fixing is for the Scan Engineer, not QA.
+
+**Other wrong or missed numbers in this set:** none of the rest is a wrong number. These are refusals of readable fares (manual entry):
+- g02: Monzo "£40.00" plus a readable £9.80 gives None, from the conflict rule.
+- g04: "Rider pays £16.00 · You earn £11.70" gives None.
+- g09: "£12.40 Fixed" gives None.
+- g17: "(1 .8 mi)" leaves the pickup unread.
+- g18: a "£2.00" tip line above a readable £8.70 gives None.
+- g19 and g20: the text has a readable fare plus a bare amount, so the conflict rule gives None.
+
+**Real OCR, 14 cards × light and dark (28 scans):**
+- Fields: 126 correct, 10 missed, 4 wrong. The 4 wrong are g01 and g11, both modes.
+- Correct end to end: a 2 hrs 45 mins trip, a 2-minute trip, km/mi mixed with no spaces, Accept-button-only fare with surge, dark O/I noise, comma decimals with km, and 1 hr 50 min / 142 km.
+- Scan time: 207–720 ms in headless desktop Chromium.
+
+### 3. Manual-entry rate on normal, unambiguous cards (all 5 fields readable)
+
+| set | readable cards | sent to manual entry |
+|---|---|---|
+| eval_set (synthetic, fullscreen and holdout) | 73 | 0 (0%) |
+| fresh set 1 (now seen) | 13 | 2 (15%): f11 "rnins", f18 "£ 12 .40" |
+| **fresh set 3 (unseen)** | 15 | **7 (47%)**: g02, g04, g09, g17, g18, g19, g20 |
+| fresh set 3, real OCR scans | 24 | 10 (42%): the same cards, plus the two badge cards where OCR lost the fare |
+
+- The strict "never guess between two fares" rules are safe, but on screens with a second bare £ amount (a bank push, tip, earnings or rider-price line) they send about half of readable cards to manual entry.
+- That is a usability cost, not a block. Pilot screenshots will show how common such screens are.
+
+### Not tested
+- Real Uber screenshots and real phones: speed, fonts and the share sheet.
+- iPhone Safari paste and the real clipboard permission prompt.
+- Upgrading an installed v1–v3 to v4.
+
+All numbers above come from synthetic or drawn cards.
