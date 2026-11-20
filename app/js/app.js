@@ -70,6 +70,7 @@ const DEMO = "UberX\n£12.40\n4.92 ★\n6 mins (1.8 mi) away\n18 mins (7.2 mi) t
 let checkMode = "scan";
 let currentOffer = null;
 let lastText = "";
+let verdictSig = "";
 
 function renderCheck() {
   const s = settings();
@@ -85,8 +86,9 @@ function renderCheck() {
       <div data-pane="scan">
         <label class="btn primary" style="width:100%">${icon("camera")}<span>${esc(t("check.scan"))}</span>
           <input type="file" id="scan-file" accept="image/*" hidden></label>
-        <p class="note" style="margin-top:8px">${esc(t("check.scanPrivacy"))}</p>
-        <p class="readout" id="scan-status"></p>
+        <button class="btn ghost" id="paste-shot" style="width:100%;margin-top:8px" hidden>${icon("text")}<span>${esc(t("check.pasteShot"))}</span></button>
+        <p class="note" style="margin-top:8px">${esc(t("check.dropHint"))} ${esc(t("check.scanPrivacy"))}</p>
+        <p class="readout" id="scan-status" aria-live="polite"></p>
       </div>
       <div data-pane="paste">
         <textarea id="ocr" spellcheck="false" aria-label="${esc(t("check.pasteHint"))}" placeholder="${esc(t("check.pasteHint"))}"></textarea>
@@ -115,18 +117,25 @@ function renderCheck() {
       <div class="callout" id="shift-msg"></div>
     </section>`;
 
-  const setMode = (m) => {
-    checkMode = m;
-    $$(".seg button", view).forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === m));
-    $$("[data-pane]", view).forEach((p) => (p.hidden = p.dataset.pane !== m));
-    updateCheck();
-  };
   $$(".seg button", view).forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#ocr").value = lastText;
   $("#ocr").addEventListener("input", () => { lastText = $("#ocr").value; updateCheck(); });
   $$("[data-pane=type] input", view).forEach((el) => el.addEventListener("input", updateCheck));
   $("#demo").addEventListener("click", () => { lastText = DEMO; $("#ocr").value = DEMO; setMode("paste"); });
   $("#scan-file").addEventListener("change", (e) => scanImage(e.target.files[0]));
+  // Optional "Paste screenshot" button: only where the async clipboard can read images.
+  const pasteBtn = $("#paste-shot");
+  pasteBtn.hidden = !(navigator.clipboard && typeof navigator.clipboard.read === "function");
+  pasteBtn.addEventListener("click", async () => {
+    let items;
+    try { items = await navigator.clipboard.read(); }
+    catch { pasteBtn.hidden = true; return; } // refused or unsupported: hide, nothing else changes
+    for (const it of items) {
+      const type = it.types.find((x) => x.startsWith("image/"));
+      if (type) { try { return scanImage(await it.getType(type)); } catch { break; } }
+    }
+    $("#scan-status").textContent = t("check.scanFailed");
+  });
   $("#save").addEventListener("click", saveOffer);
 
   const shiftMsg = () => {
@@ -143,6 +152,13 @@ function renderCheck() {
   $("#hours").addEventListener("input", (e) => saveShift({ shiftHours: +e.target.value || 0 }));
   shiftMsg();
   setMode(checkMode);
+}
+
+function setMode(m) {
+  checkMode = m;
+  $$(".seg button", view).forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === m));
+  $$("[data-pane]", view).forEach((p) => (p.hidden = p.dataset.pane !== m));
+  updateCheck();
 }
 
 const FIELD = { fare: "check.fare", pickup_min: "check.pickupMin", pickup_miles: "check.pickupMi", trip_min: "check.tripMin", trip_miles: "check.tripMi" };
@@ -172,19 +188,27 @@ function updateCheck() {
       <p class="sub" style="margin:0;color:var(--fg)">${esc(blank ? t("check.pasteHint") : t("v.sub.UNKNOWN"))}</p>`;
     return;
   }
+  // SAFETY.md: the app can't tell if the car is moving, so only the word and colour show at first.
+  // Numbers sit behind "Details (parked only)", closed by default and closed again on each new verdict.
+  const vo = v.offer;
+  const sig = JSON.stringify([v.decision, vo.fare, vo.pickup_min, vo.pickup_miles, vo.trip_min, vo.trip_miles, s]);
+  const keepOpen = sig === verdictSig && !!$("#details", el)?.open;
+  verdictSig = sig;
   el.innerHTML = `
     <div class="word">${esc(t("v." + v.decision))}</div>
     <p style="margin:0">${esc(t("v.sub." + v.decision))} <span class="sub">${esc(t("v.conf." + v.confidence))}</span></p>
+    <details class="details" id="details"${keepOpen ? " open" : ""}><summary>${esc(t("v.details"))}</summary>
     <div class="range">${ltr(`${money(v.perHr[0], 0)}–${money(v.perHr[2], 0)}<small> / h</small>`)}</div>
     <div class="grid3">
-      <div class="stat"><div class="k">${esc(t("v.perMile"))}</div><div class="v">${money(v.perMile[1])}</div></div>
-      <div class="stat"><div class="k">${esc(t("v.perMin"))}</div><div class="v">${money(v.perMin)}</div></div>
+      <div class="stat"><div class="k">${esc(t("v.perMile"))}</div><div class="v">${ltr(money(v.perMile[1]))}</div></div>
+      <div class="stat"><div class="k">${esc(t("v.perMin"))}</div><div class="v">${ltr(money(v.perMin))}</div></div>
       <div class="stat"><div class="k">${esc(t("v.totalTrip"))}</div><div class="v">${ltr(num(v.totalMiles) + " mi")}</div><div class="s">${ltr(num(v.totalMin, 0) + " min")}</div></div>
-      <div class="stat"><div class="k">${esc(t("v.cost"))}</div><div class="v">${money(v.cost)}</div></div>
-      <div class="stat"><div class="k">${esc(t("v.takeHome"))}</div><div class="v">${money(v.take)}</div></div>
+      <div class="stat"><div class="k">${esc(t("v.cost"))}</div><div class="v">${ltr(money(v.cost))}</div></div>
+      <div class="stat"><div class="k">${esc(t("v.takeHome"))}</div><div class="v">${ltr(money(v.take))}</div></div>
     </div>
     ${v.decision !== "ACCEPT" ? `<p class="sub" style="margin:0;color:var(--fg)">${esc(t("v.needs", { fare: money(v.fareNeeded) }))}</p>` : ""}
-    ${v.reasons.length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(t("v.reason." + r))}</li>`).join("")}</ul>` : ""}`;
+    ${v.reasons.length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(t("v.reason." + r))}</li>`).join("")}</ul>` : ""}
+    </details>`;
 }
 
 let tesseractLoading = null;
@@ -201,9 +225,12 @@ function loadTesseract() {
 }
 
 // Screenshot is read on the phone; the image is never uploaded or stored.
+// file: a File or Blob from the picker, paste, drop or share target.
 async function scanImage(file) {
   if (!file) return;
+  if (checkMode !== "scan") setMode("scan");
   const status = $("#scan-status");
+  if (!/^image\//.test(file.type || "")) { status.textContent = t("check.scanFailed"); return; }
   status.textContent = t("check.scanning");
   try {
     const T = await loadTesseract();
@@ -230,6 +257,61 @@ function saveOffer() {
   });
   $("#save").disabled = true;
   $("#saved").hidden = false;
+}
+
+// ---------- quick capture: paste, drop and Android share (R1) ----------
+const imageFrom = (list) => [...(list || [])].find((f) => f && /^image\//.test(f.type || "")) || null;
+
+// Paste an image anywhere on the Check screen. Plain-text pastes are left alone (they go to the textarea).
+document.addEventListener("paste", (e) => {
+  if (currentRoute() !== "check") return;
+  const dt = e.clipboardData;
+  const img = imageFrom(dt?.files) || imageFrom([...(dt?.items || [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()));
+  if (!img) return;
+  e.preventDefault();
+  scanImage(img);
+});
+
+// Drag and drop an image file onto the page (desktop).
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+document.addEventListener("dragover", (e) => {
+  if (currentRoute() !== "check" || !hasFiles(e)) return;
+  e.preventDefault();
+  document.body.classList.add("dropping");
+});
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dropping"); });
+document.addEventListener("drop", (e) => {
+  document.body.classList.remove("dropping");
+  if (currentRoute() !== "check" || !hasFiles(e)) return;
+  e.preventDefault();
+  const files = e.dataTransfer.files;
+  const img = imageFrom(files);
+  if (img) scanImage(img);
+  else if (files.length) { setMode("scan"); $("#scan-status").textContent = t("check.scanFailed"); }
+});
+
+// Share target: sw.js parks the shared image in SHARE_CACHE and redirects here (#check).
+// Read it once and drop the whole cache straight away, success or failure. Keep names in step with sw.js.
+const SHARE_CACHE = "fairfare-share";
+const SHARE_KEY = "shared-image";
+async function takeSharedImage() {
+  if (!("caches" in window)) return null;
+  let blob = null, found = false;
+  try {
+    if (!(await caches.has(SHARE_CACHE))) return null;
+    const cache = await caches.open(SHARE_CACHE);
+    const res = await cache.match(new URL(SHARE_KEY, location.href.split("#")[0]).href);
+    if (res) { found = true; blob = await res.blob(); }
+  } catch { /* fall through: the cache is still cleared below */ }
+  finally { try { await caches.delete(SHARE_CACHE); } catch { /* nothing else to do */ } }
+  return found ? blob : null;
+}
+
+async function checkShared() {
+  const blob = await takeSharedImage();
+  if (!blob) return;
+  if (currentRoute() !== "check") { location.hash = "#check"; render(); }
+  scanImage(blob); // a non-image or empty share shows "Couldn't read that screenshot"
 }
 
 // ---------- live events (official sources, refreshed every 6 hours by GitHub Actions) ----------
@@ -572,5 +654,6 @@ window.addEventListener("hashchange", render);
   await setLanguage(store.get("lang", null) || guessLanguage());
   await loadLive();
   render();
+  checkShared();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

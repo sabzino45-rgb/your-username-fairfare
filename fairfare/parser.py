@@ -42,7 +42,23 @@ class Offer:
 
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
-_FARE = re.compile(r"£\s?" + _NUM)
+# A £ amount. OCR (dark mode especially) reads 0 as O/o and 1 as l/I inside the
+# number, so those are allowed after the first digit and mapped back. The amount
+# must end at a non-alphanumeric character (and not mid-decimal), or it is not trusted at all.
+_FARE = re.compile(r"£\s?([0-9][0-9OoIl]*(?:[.,][0-9OoIl]{1,2})?)(?![A-Za-z0-9]|[.,][0-9OoIl])")
+_OCR_DIGITS = str.maketrans("OoIl", "0011")
+# Lines whose £ amount is not the offer fare: promos, earnings totals, balances,
+# tips, bonuses, and surge/boost lines (the surge is part of the fare, not the fare).
+_NOT_FARE = re.compile(
+    r"\b(?:off|discount|promo|code|voucher|coupon|save|saved|earned|today|week|weekly|"
+    r"balance|cash ?out|tips?|bonus|quest|reward|refer|cashback|credit|wallet|extra|"
+    r"surge|boost|includes?|included|incl)\b",
+    re.I | re.ASCII,  # ASCII \b, as in the JS port
+)
+# Lines whose min/distance pair is navigation, not an offer leg.
+_NOT_LEG = re.compile(r"\b(?:arriv\w*|eta|remaining|destination|route|to go)\b", re.I | re.ASCII)
+# The fare sits on the card just above the legs: at most this many lines above the first leg.
+_FARE_WINDOW_LINES = 4
 _SURGE = re.compile(r"\+\s?£\s?" + _NUM + r"[^\n]*?(?:surge|boost|included)", re.I)
 # "6 mins (1.8 mi) away" / "6 min (2.9 km) away" / "Pickup: 6 min · 1.8 mi"
 _LEG = re.compile(
@@ -55,6 +71,13 @@ _RATING = re.compile(_NUM + r"\s*[★*]")
 
 def _f(s: str) -> float:
     return float(s.replace(",", "."))
+
+
+def _line_at(text: str, pos: int) -> tuple[int, str]:
+    """Line number and full line containing position pos."""
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    return text.count("\n", 0, pos), text[start:] if end == -1 else text[start:end]
 
 
 def _miles(value: float, unit: str) -> float:
@@ -72,21 +95,49 @@ def parse_offer_text(text: str) -> Offer:
     if surge_m:
         offer.surge = _f(surge_m.group(1))
 
-    # The fare is the first £ amount that is not the surge line.
-    for m in _FARE.finditer(text):
-        if surge_m and surge_m.start() <= m.start() < surge_m.end():
-            continue
-        offer.fare = _f(m.group(1))
-        break
-
     legs = []
     for m in _LEG.finditer(text):
+        if _NOT_LEG.search(_line_at(text, m.start())[1]):
+            continue  # navigation bar ("14 min · 5.2 mi · arrive 18:02"), not an offer leg
         minutes, dist, unit, label = _f(m.group(1)), _f(m.group(2)), m.group(3), (m.group(4) or "").lower()
         # Look just before the match too, for layouts like "Pickup: 6 min · 1.8 mi"
         before = text[max(0, m.start() - 12):m.start()].lower()
         if not label:
             label = "pickup" if "pickup" in before else "trip" if "trip" in before else ""
-        legs.append((label, minutes, _miles(dist, unit)))
+        legs.append((label, minutes, _miles(dist, unit), m.start()))
+
+    if len(legs) > 2:
+        # Several offers on one screen (e.g. a Trip Radar list): can't tell which one is meant.
+        offer.surge = None
+        offer.warnings.append("multiple_offers")
+        offer.warnings.append("needs_manual_entry")
+        return offer
+
+    # Fare candidates: £ amounts that are not the surge line and not on a promo/earnings/tip line.
+    fares = []
+    for m in _FARE.finditer(text):
+        if surge_m and surge_m.start() <= m.start() < surge_m.end():
+            continue
+        line_no, line = _line_at(text, m.start())
+        if _NOT_FARE.search(line):
+            continue
+        fares.append((m.start(), line_no, _f(m.group(1).translate(_OCR_DIGITS))))
+
+    if legs:
+        # The fare is the nearest candidate above the first leg, within the card.
+        anchor = min(l[3] for l in legs)
+        anchor_line = _line_at(text, anchor)[0]
+        near = [c for c in fares if c[0] < anchor and anchor_line - c[1] <= _FARE_WINDOW_LINES]
+        if near:
+            offer.fare = near[-1][2]
+        elif fares:
+            offer.warnings.append("fare_not_near_legs")
+    elif fares:
+        values = {c[2] for c in fares}
+        if len(values) == 1:
+            offer.fare = fares[0][2]
+        else:
+            offer.warnings.append("fare_ambiguous")
 
     pickup = next((l for l in legs if l[0] in ("away", "pickup")), None)
     trip = next((l for l in legs if l[0] == "trip"), None)

@@ -1,4 +1,5 @@
 """The app's JavaScript engine (app/js/engine.js) must match the Python engine on every eval case."""
+import glob
 import json
 import os
 import shutil
@@ -28,15 +29,24 @@ console.log(JSON.stringify(out));
 """
 
 
+CASE_FILES = sorted(glob.glob(os.path.abspath(os.path.join(ROOT, "eval_set", "*.jsonl"))))
+
+
+def test_parity_covers_every_eval_file():
+    assert len(CASE_FILES) >= 2 and any(p.endswith("synthetic_fullscreen.jsonl") for p in CASE_FILES)
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_js_engine_matches_python():
+@pytest.mark.parametrize("cases", CASE_FILES, ids=os.path.basename)
+def test_js_engine_matches_python(cases):
     engine = os.path.abspath(os.path.join(ROOT, "app", "js", "engine.js"))
-    cases = os.path.abspath(os.path.join(ROOT, "eval_set", "synthetic.jsonl"))
     r = subprocess.run(["node", "--input-type=module", "-e", JS % ("file://" + engine, cases)],
                        capture_output=True, text=True, check=True)
     js = {row["id"]: row for row in json.loads(r.stdout)}
     with open(cases) as fh:
         for line in fh:
+            if not line.strip():
+                continue
             c = json.loads(line)
             o = parse_offer_text(c["ocr_text"])
             v = estimate(o, DriverProfile())

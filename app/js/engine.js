@@ -7,7 +7,35 @@ export const KM_PER_MILE = 1.609344;
 export const REQUIRED = ["fare", "pickup_min", "pickup_miles", "trip_min", "trip_miles"];
 const NUM = "(\\d+(?:[.,]\\d+)?)";
 const f = (s) => parseFloat(String(s).replace(",", "."));
-const r2 = (x) => Math.round(x * 100) / 100;
+// Round to 2 decimals exactly like Python's round(x, 2): use the exact binary value
+// (toFixed is exact), and break true ties to even. Math.round(x * 100) / 100 differs,
+// e.g. 1.075 (really 1.07499...) gives 1.08 in JS but 1.07 in Python.
+const r2 = (x) => {
+  if (!Number.isFinite(x)) return x;
+  const exact = Math.abs(x).toFixed(60);
+  if (/\.\d\d50*$/.test(exact)) {
+    const lo = Math.floor(Math.abs(x) * 100);
+    const n = (lo % 2 === 0 ? lo : lo + 1) / 100;
+    return x < 0 ? -n : n;
+  }
+  return Number(x.toFixed(2));
+};
+// Same rules as fairfare/parser.py (_FARE, _NOT_FARE, _NOT_LEG, _FARE_WINDOW_LINES).
+// OCR reads 0 as O/o and 1 as l/I inside a number; the amount must end cleanly or it isn't trusted.
+const FARE_SRC = "£\\s?([0-9][0-9OoIl]*(?:[.,][0-9OoIl]{1,2})?)(?![A-Za-z0-9]|[.,][0-9OoIl])";
+const ocrDigits = (s) => s.replace(/[Oo]/g, "0").replace(/[Il]/g, "1");
+const NOT_FARE = new RegExp(
+  "\\b(?:off|discount|promo|code|voucher|coupon|save|saved|earned|today|week|weekly|" +
+  "balance|cash ?out|tips?|bonus|quest|reward|refer|cashback|credit|wallet|extra|" +
+  "surge|boost|includes?|included|incl)\\b", "i");
+const NOT_LEG = /\b(?:arriv\w*|eta|remaining|destination|route|to go)\b/i;
+const FARE_WINDOW_LINES = 4;
+// Line number and full line containing position pos.
+function lineAt(text, pos) {
+  const start = text.lastIndexOf("\n", pos - 1) + 1;
+  const end = text.indexOf("\n", pos);
+  return [text.slice(0, pos).split("\n").length - 1, end === -1 ? text.slice(start) : text.slice(start, end)];
+}
 
 export function emptyOffer(source = "scan") {
   return { fare: null, pickup_min: null, pickup_miles: null, trip_min: null, trip_miles: null,
@@ -21,25 +49,50 @@ export function parseOfferText(text) {
 
   const sm = new RegExp("\\+\\s?£\\s?" + NUM + "[^\\n]*?(?:surge|boost|included)", "i").exec(text);
   if (sm) o.surge = f(sm[1]);
-  const fareRe = new RegExp("£\\s?" + NUM, "g");
-  let m;
-  while ((m = fareRe.exec(text))) {
-    if (sm && sm.index <= m.index && m.index < sm.index + sm[0].length) continue;
-    o.fare = f(m[1]);
-    break;
-  }
 
   // [ \t] not \s: a label must be on the same line, or "Trip" on the next line is stolen.
   const legRe = new RegExp(NUM + "[ \\t]*(?:mins?|minutes?)[ \\t]*[(\\[·•,-]?[ \\t]*" + NUM +
                            "[ \\t]*(mi|miles?|km)\\b\\)?[ \\t]*(away|trip|pickup)?", "gi");
   const legs = [];
+  let m;
   while ((m = legRe.exec(text))) {
+    if (NOT_LEG.test(lineAt(text, m.index)[1])) continue; // navigation bar, not an offer leg
     let label = (m[4] || "").toLowerCase();
     const before = text.slice(Math.max(0, m.index - 12), m.index).toLowerCase();
     if (!label) label = before.includes("pickup") ? "pickup" : before.includes("trip") ? "trip" : "";
     const d = f(m[2]);
-    legs.push([label, f(m[1]), m[3].toLowerCase().startsWith("km") ? d / KM_PER_MILE : d]);
+    legs.push([label, f(m[1]), m[3].toLowerCase().startsWith("km") ? d / KM_PER_MILE : d, m.index]);
   }
+
+  if (legs.length > 2) {
+    // Several offers on one screen (e.g. a Trip Radar list): can't tell which one is meant.
+    o.surge = null;
+    o.warnings.push("multiple_offers");
+    o.warnings.push("needs_manual_entry");
+    return o;
+  }
+
+  // Fare candidates: £ amounts that are not the surge line and not on a promo/earnings/tip line.
+  const fareRe = new RegExp(FARE_SRC, "g");
+  const fares = [];
+  while ((m = fareRe.exec(text))) {
+    if (sm && sm.index <= m.index && m.index < sm.index + sm[0].length) continue;
+    const [lineNo, line] = lineAt(text, m.index);
+    if (NOT_FARE.test(line)) continue;
+    fares.push([m.index, lineNo, f(ocrDigits(m[1]))]);
+  }
+  if (legs.length) {
+    // The fare is the nearest candidate above the first leg, within the card.
+    const anchor = Math.min(...legs.map((l) => l[3]));
+    const anchorLine = lineAt(text, anchor)[0];
+    const near = fares.filter((c) => c[0] < anchor && anchorLine - c[1] <= FARE_WINDOW_LINES);
+    if (near.length) o.fare = near[near.length - 1][2];
+    else if (fares.length) o.warnings.push("fare_not_near_legs");
+  } else if (fares.length) {
+    if (new Set(fares.map((c) => c[2])).size === 1) o.fare = fares[0][2];
+    else o.warnings.push("fare_ambiguous");
+  }
+
   let pickup = legs.find((l) => l[0] === "away" || l[0] === "pickup") || null;
   let trip = legs.find((l) => l[0] === "trip") || null;
   const unl = legs.filter((l) => l[0] === "");
