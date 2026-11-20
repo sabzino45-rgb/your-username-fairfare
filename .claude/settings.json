@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(python tools/run_eval.py:*)",
+      "Bash(python tools/gate.py:*)",
+      "Bash(python tools/economics.py:*)",
+      "Bash(python tools/redact.py:*)"
+    ],
+    "deny": [
+      "Edit(SAFETY.md)",
+      "Write(SAFETY.md)",
+      "Bash(git push origin main:*)",
+      "Bash(git push --force:*)"
+    ],
+    "ask": [
+      "Edit(economics.json)",
+      "Write(economics.json)",
+      "Bash(git push:*)"
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+# FairFare: agent team
+
+FairFare analyses ride offers: it scans an Uber offer card, estimates take-home pay per hour and per mile as a range, and gives an ACCEPT / MARGINAL / DECLINE verdict against the driver's own targets.
+
+## You are the Orchestrator
+
+The main Claude Code session is the Orchestrator. Subagents can't start other subagents, so the loop runs from here. Start a cycle with `/cycle`.
+
+You run the loop, assign work, enforce the gates, and keep decisions.md. Each cycle: read insights.md and decisions.md; set one measurable goal for this version; assign tasks to the other agents; collect their reports; and decide pass/fail against the goal and the gates (QA, Privacy and Economics can each block). Never approve anything involving legal risk, pricing or the safety rule without human sign-off. Log every decision and its reason in decisions.md.
+
+## Team (.claude/agents/)
+
+| Agent | Owns | Writes |
+|---|---|---|
+| research | evidence | insights.md |
+| product-spec | scope, goal, hands-free/safety design | spec.md, reports/cycle-N/goal.json |
+| scan-engineer | fairfare/parser.py | reports/cycle-N/scan.md |
+| verdict-modeler | fairfare/verdict.py | reports/cycle-N/verdict.md |
+| builder | everything else in the app | code on a cycle-N/* branch |
+| qa-red-team | finding failures (reports only) | reports/cycle-N/qa.md |
+| privacy-compliance | UK GDPR, retention, ToS flags | reports/cycle-N/privacy.md |
+| economics | cost per scan, margin, price tests | unit-economics.md, reports/cycle-N/economics.md |
+
+## Gates that need a human (never approve these yourself)
+
+- Anything touching Uber's terms, legal or privacy decisions. Agents flag; a human or solicitor decides.
+- Pricing changes (economics.json price_per_month).
+- Shipping to real drivers. Agents never push to main, release or deploy.
+- Any change to the safety rule in SAFETY.md (edits to it are denied in .claude/settings.json).
+
+Put each one in reports/cycle-N/human_gates.md as `- [ ] item`. A human ticks it `- [x]`. `tools/gate.py` returns HOLD while any item is unticked.
+
+## Shared files
+
+- eval_set/*.jsonl: redacted offer text, correct fields and logged outcomes. This is the regression test and the most valuable asset. Real cases use `"origin": "pilot"`. synthetic.jsonl exists only so the loop runs before pilot data does.
+- spec.md, insights.md, decisions.md, unit-economics.md, SAFETY.md
+- research/: humans drop interview notes, pilot feedback and price-test results here.
+
+## Commands
+
+- `python -m pytest -q`: unit tests
+- `python tools/run_eval.py [--verbose] [--save F] [--baseline reports/eval_baseline.json]`: scan accuracy, verdict median/p90 error, range coverage. Exits 1 on regression.
+- `python tools/gate.py N`: release gate for cycle N (0 PASS, 1 FAIL, 2 HOLD)
+- `python tools/economics.py`: unit economics
+- `python tools/redact.py < raw.txt`: redact OCR text before it goes into eval_set/
+
+## The main risk
+
+Agents will happily polish a product nobody pays for. Tie each cycle's goal to a real-world metric (accuracy, retention, conversion), not to "more features". Metrics from synthetic data prove nothing about real drivers, so say so whenever a decision rests on them.

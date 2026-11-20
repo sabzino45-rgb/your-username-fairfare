@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+*.png
+*.jpg
+*.jpeg
+*.heic
+reports/cycle-*/qa_probes/
+.claude/settings.local.json
