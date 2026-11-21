@@ -132,3 +132,116 @@ The three refusals:
 
 ## Summary
 BLOCK. On a fourth set of 32 unseen cards, the fare-zone reader gave 5 wrong fares, and all 5 became a false ACCEPT. It happens when the label is misread or spelled differently ("Uber X", "Uber Comfort", "UberX12.40"), when a ride-name chip sits higher up the screen, when another card's "Accept £31.50" shows above the legs, or when a rider-price amount sits in the zone. With real OCR, the same 5 failed in light and dark mode. Three more drawn cards failed with no line removed by hand: OCR dropped the badge fare itself. Python and JS agree, pytest passes and the UI checks pass. The manual-entry targets are met: 15% at text level and 23% on real OCR. All of this is synthetic.
+
+---
+
+## Attempt 2 re-test (2026-11-21)
+
+**STATUS: BLOCK.** The first line of this file still reads `STATUS: BLOCK`.
+- All of set 4 is fixed, at text level and with real OCR.
+- My new set 5 gives a false ACCEPT on real screenshot scans in 4 of its 25 cards. The height cross-check doesn't catch these, because the stray amount is drawn bigger than everything else on the screen. In every one the card's own fare was on a green badge, and Tesseract lost it by itself.
+- The height check also sends many readable cards to manual entry.
+
+**All figures are synthetic: made-up text and cards I drew. None of it is a real Uber screenshot.**
+
+**Code under test:**
+- parser.py and engine.js, including `fareFromLines` and `reconcileScanFare`;
+- app.js `scanImage` and `scanGeo`.
+
+**Probes** are in `reports/cycle-2/qa_probes/`:
+- `make_cases5.py` writes `fresh_cases_5.jsonl` (25 cards).
+- `ocr_run5.js` runs real OCR through the app. It records the verdict word and the fare the app actually used, read from the Details readout after the height check, plus a text-only parse of `#ocr`.
+- `score_a2.py` scores the scans.
+- `geo_diag.js` logs Tesseract's line heights.
+- `set4_redraw.jsonl` redraws 4 set-4 cards.
+- `ui_probe4_a2.js` checks the Offer check screen.
+- The app was served with `python3 -m http.server 8777` and the server was stopped afterwards.
+- 102 scans in total: 0 requests left the origin and the page logged 0 errors. Scan time was 196–959 ms.
+
+### 1. Set 4 and the badge cards, re-run
+
+| | text level (both engines, 32 + 4 cards) | real OCR (36 + 8 badge scans, light and dark) |
+|---|---|---|
+| h04, h05, h07, h09, h10 | fare None. **Fixed.** | fare None, CAN'T TELL. **Fixed.** |
+| b1–b4 (badge fares) | correct | all CAN'T TELL. 0 wrong; OCR lost every badge fare. |
+| wrong numbers / false ACCEPTs | 0 / 0 | 0 / 0 |
+| Python vs JS | 0 differences | n/a |
+
+h29 now reads its true fare (£12.40) at text level and in both scan modes.
+
+### 2. Fresh set 5 (`fresh_cases_5.jsonl`, 25 cards, not in eval_set)
+
+What the set covers:
+- **Stray amounts drawn as big as the fare, or bigger:** a big earnings pill, a quest banner, a "£50 bonus" promo, a streak reward, a rider price, a tip line, and a second card's fare.
+- **The fare slightly smaller than another amount.**
+- **OCR merging lines:** the fare and surge on one row, the fare and rating on one row, and the label and an amount on one row.
+- **Several normal cards**, in Inter, DejaVu Serif and DejaVu Sans Mono, with fares drawn at 28–40 px and body text at 14–18 px.
+
+All 25 cards were drawn and scanned in light and dark mode (50 scans). 6 cards have the fare on a green badge.
+
+#### Real screenshot scans: the app's own result, after the height check
+
+The verdicts below are the app's; "truth" is the verdict on the fare shown in the image.
+
+| card | what happened | app fare | app verdict, default / £1.50 | truth, default / £1.50 |
+|---|---|---|---|---|
+| **p01**, light | Earnings pill "£58.40" drawn at 34 px bold. The label sits on a dark chip and the fare on a green badge; OCR lost both. The no-label path took the lone amount, and the height check agreed, because 58.40 was the tallest money line (49 px, against a 32 px median). | 58.40 | **ACCEPT / ACCEPT** | MARGINAL / DECLINE |
+| **p03**, light and dark | "UberX", then the badge fare (lost), then a 40 px "£50.00" with "Finish 3 more trips by 6pm" on the next line. The zone holds one amount, and the height check agreed (57 px). | 50.00 | ACCEPT / **ACCEPT** | ACCEPT / DECLINE |
+| **p20**, dark | Yellow quest banner "£45.00" at 36 px. The label chip and the badge fare were both lost, so the same path as p01. In light mode OCR did read the badge fare, but lost the trip leg. | 45.00 | ACCEPT / **ACCEPT** | ACCEPT / DECLINE |
+| **p21**, light and dark | "Comfort", then the badge fare (lost), then a 38 px "£40.00" with "Weekend streak reward" on the next line. Same path as p03. | 40.00 | **ACCEPT** / MARGINAL | MARGINAL / DECLINE |
+
+- **Severity: high. Area: scan.** That makes 7 false ACCEPT scan-and-settings pairs.
+  - These are real Tesseract runs on drawn cards, and nobody removed the fare line by hand.
+  - p01 in dark mode and p07 in both modes were refused correctly. In p07 the text rules read the wrong 58.40, and the height check vetoed it.
+- **Why the height check can't catch these:**
+  - The check only confirms that the text rules' amount is the tallest money line.
+  - When the card's fare is lost and the stray amount is the biggest text on the screen, the two signals agree on the wrong number.
+  - The Scan Engineer named this as a possible gap (scan.md, Attempt 2, open item 1). It reproduces easily: in all 4 cards the stray amount is drawn bigger than the fare.
+- **The text-rule holes that let it through:**
+  1. **No label, lone amount (p01, p20).** With no label found, a single bare amount above the legs is still the fare. Scan.md calls this a "departure" from the literal no-label rule. Here OCR lost the label because it was white on a dark chip, the same effect cycle 1 saw on dark pills.
+  2. **A lone bare amount in the zone whose caption is on the next line (p03, p21).** Only rider-price words are checked on neighbouring lines. Pill, promo and reward words count only when they are on the same line as the amount.
+- **How likely is this?** It needs a stray amount drawn bigger than the fare, plus OCR losing the fare (here a green badge). Neither has been seen on a real Uber card. I'd rate it unlikely but possible, like the cycle-1 block. The owner may accept the risk; under the rule I can't.
+
+#### Text level: what pasted text would give (no height check)
+- 5 wrong numbers: p01, p03, p07, p20 and p21. All are false ACCEPTs at default or £1.50.
+- Python and JS give identical results.
+- In the app these are reached only if a driver pastes OCR text that has lost the fare line. A pasted Uber card would normally include its fare, so this is reported separately and is not the main judgement.
+- p22 (a big rider price with a caption below) is correctly refused at text level and in the scans.
+
+### 3. Manual-entry rate on readable cards
+
+| set | text level | real OCR, without badge cards | real OCR, with badge cards |
+|---|---|---|---|
+| set 4, as drawn in attempt 1 | 2/20 (10%): h16, h17 | 12/26 (46%) | 20/34 (59%) |
+| set 4, with h13, h23, h26 and h27 redrawn so the fare line is the big one | same | **6/26 (23%)**: h16, h17, h23 | 14/34 (41%) |
+| **set 5** | 2/18 (11%): p08, p09 | **20/36 (56%)** | 26/48 (54%) |
+| set 5, the 9 normal cards only (p10–p17, p24) | 0/9 | 2/18 (11%): p14 | n/a |
+
+- **Targets** (at most 20% for text, at most 25% for OCR):
+  - The text target is met on both sets.
+  - The OCR target is met on set 4 when the fare is drawn big.
+  - On set 5 the OCR target is **missed by a wide margin: 56%, against 25%.**
+- **Every set-5 scan refusal came from the height check.** The text rules read the right fare on all 36 readable scans.
+- **The check refuses whenever another amount is drawn at about 80% of the fare's size or more:** a pill as big as the fare (p02), a "£50 bonus" promo (p04, p19), a rider price (p05), a second card's fare (p06), a tip line (p23), or a fare sharing a row with surge or rating (p08, p09).
+- **It also refuses plain cards where the fare is only about 1.75× the body text** (`geo_diag.js` shows why):
+  - Tesseract's line boxes are not proportional to font size. Leg lines with brackets are 32 px tall, and a digits-only fare at 30 px font is 43 px. That is 1.34× the median, below 1.5×. Examples: p14 and h23.
+  - A banner line with descenders ("£58.40 · Today", 22 px font) has a 41 px box, against the 34 px fare's 49 px box. That is 1.195×, below 1.25×. Example: p18.
+  - So the check effectively needs the fare drawn at about 2× the body text, with any other amount below about 0.65× of the fare.
+  - Whether real Uber cards meet that is unknown.
+- **Green-badge fares are lost by OCR in 8 of 8 set-4 badge scans.** In set 5, OCR read the badge fare on 1 of the 12 badge scans (p20 light).
+
+### 4. Regression
+- `python -m pytest -q`: 87 passed.
+- `run_eval --baseline reports/cycle-2/eval_before.json`: no regression. On the synthetic side, wrong_numbers is 0 and false_accepts is 0 on 140 cases.
+- **Offer check screen** (`ui_probe4_a2.js`): all 8 checks pass.
+  - The verdict word shows.
+  - Details is closed by default.
+  - No numbers show outside Details.
+  - The old ACCEPT clears at once on a new scan.
+  - A scanned card shows its own verdict.
+  - A failed read gives CAN'T TELL.
+  - No page errors.
+- **Safety:** no UI strings or flows changed. Nothing new needs the phone handled while driving.
+
+### Summary (attempt 2)
+BLOCK. Attempt 2 fixes all of set 4 (0 wrong, 0 false ACCEPT, at text level and with real OCR). On fresh set 5, real scans give false ACCEPTs on 4 of 25 cards (p01, p03, p20, p21). In each, Tesseract lost the green-badge fare, and a bigger stray amount was then read as the fare, with the height check agreeing. The stray amount was an earnings pill, a quest banner, or a promo or reward amount with its caption on the next line. Manual entry is within target at text level (11%) and on set 4 (23%). On set 5 it reaches 56%, because the height check refuses any card where another amount is nearly as big as the fare. pytest and the UI checks pass. All synthetic.
