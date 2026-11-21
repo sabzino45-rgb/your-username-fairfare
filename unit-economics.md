@@ -1,6 +1,6 @@
 # Unit economics
 
-_Owned by economics. Inputs in economics.json are placeholders until real costs are known. Last updated: cycle 1, 2026-11-20._
+_Owned by economics. Inputs in economics.json are placeholders until real costs are known. Last updated: cycle 1, 2026-11-20. Cycle 2 (2026-11-21): reader-rule changes only, no cost change; figures below still hold. Tesseract is now self-hosted under app/vendor (still £0), not loaded from cdn.jsdelivr.net._
 
 ## Current figures
 
