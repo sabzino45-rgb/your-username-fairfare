@@ -108,3 +108,116 @@ Written and evaluated before any parser change. QA's qa_probes files were not us
 5. Real notifications, pills and banners contain at least one ordinary word, or a clock or battery %, on a line between them and the card.
 6. Rider names and addresses sit between the label and the legs, or between the legs. They do not affect the labelled zone, but they cut the window on no-label cards (safe: a refusal).
 7. The test cases are invented. The 0 wrong numbers and the 0.0 readable-manual rate are on cases I wrote myself, knowing the rule. QA's fourth unseen set and real screenshots are the real check.
+
+---
+
+# Attempt 2 (after the QA BLOCK in reports/cycle-2/qa.md)
+
+**Everything here is synthetic: invented text, and cards I drew myself. None of it is a real Uber screenshot.** I read qa.md for the mechanisms only. I did not open or use any case in `reports/cycle-2/qa_probes/`.
+
+## What changed
+
+### 1. A second, independent signal for screenshots: text height (engine.js and app.js, scan path only)
+- **`fareFromLines(lines)`** in app/js/engine.js is a pure function. It takes `[{text, height}]`, with height = the bbox's y1 - y0 from Tesseract's `data.lines`. It returns the fare or null.
+  - It takes the tallest line that holds a money-shaped amount. That means a £ amount, or any `d.dd` with 1 to 3 digits before the point, such as "E14.20" or "4.92".
+  - That line's £ amount is the fare only if all of these hold:
+    - the line is at least **1.5 times the median height** of all text lines;
+    - it is at least **1.25 times as tall as every other money-shaped line** (a 25% margin);
+    - it holds exactly one distinct £ amount, with the usual OCR repairs (O/I/l, non-ASCII digits). Rates such as "£1.10/mi" and add-ons such as "+£2.00" are skipped.
+  - Fewer than 3 text lines gives null.
+  - If the tallest money line has no £ (a misread "E14.20", or a rating), the result is null. It is never the next one down.
+- **`reconcileScanFare(offer, geoFare)`:** if the text-rule fare and the height fare disagree, or either is null, the fare becomes null. The warning is `fare_height_disagrees`, and the card goes to manual entry. With no geometry (pasted text), the offer is unchanged.
+- **app.js `scanImage`:**
+  - Both OCR passes now ask Tesseract for `{text, blocks}`. Each pass keeps its own text and line heights.
+  - The lines from whichever pass wins are stored with that pass's text (`scanGeo`).
+  - `updateCheck` applies the height check only while the text box still holds exactly that scanned text. Editing the box, pasting or the demo clears it, and those are then treated as pasted text.
+  - Nothing else in app.js changed. No UI, styles or lang files were touched.
+- **Tests:** `tests/test_js_geometry.py` runs 13 of my own line lists and the reconcile cases in Node.
+
+### 2. Stricter text rules (parser.py and engine.js, identical)
+- **Label variants count as labels:**
+  - "Uber" before any name, with or without a space or hyphen ("Uber X", "Uber-X", "Uber XL", "Uber Comfort", "Uber Exec", "Uber Green");
+  - "Uber" alone and "X" alone;
+  - chips such as "Uber X · Comfort";
+  - a label glued to an unreadable fare ("UberX9.80", "UberXE12.40", "UberX E12.40").
+
+  Treating more lines as labels is the safe direction. An amount above a label is ignored, so a wrong label can only cause a refusal.
+- **Window:** the anchor is the label nearest above the first leg. If more than **3** non-blank lines sit between that label and the first leg, the fare is None (`fare_label_too_far`).
+  - Rating-only and badge-only lines are not counted. Otherwise the standard "fare / surge line / Exclusive / rating" card (an existing test) would be refused.
+- **Accept:** an amount on an Accept line counts only when that line is below the legs.
+  - In the zone, an Accept-line amount is not a fare.
+  - With no label, an Accept line above the legs (another card's) refuses the fare.
+- **Rider price:** an amount is rejected if its line, or the non-blank line just above or below, says "rider(s)", "customer pays", "you paid" or "total paid".
+- **No label at all: departure from the instruction.** The instruction was "no label, fare = None". I did **not** apply it literally.
+  - 16 of the original 60 cases use the label-free "£fare / Pickup: … / Trip: …" layout. spec.md requires those rows to stay unchanged, and `--baseline` would fail.
+  - Instead, with no label the cycle-1 rules plus the attempt-1 cut-off stay, with two new limits:
+    - below the cut-off there must be exactly **one** distinct amount;
+    - an Accept line above the legs refuses.
+  - For **screenshots** the height check now covers this path: k11 below is that exact case, and the app refuses it.
+  - For **pasted text** there is a remaining risk. If OCR loses both the label and the fare, a lone stray amount still becomes the fare.
+  - If the Orchestrator wants the literal rule, it is a one-line change in each engine. It would cost 16/60 original rows, plus syn-fs-005, syn-fs-009, syn-fz-023/024 and syn-fz2-016, as refusals.
+- **Bug found by real OCR:** in dark mode the rating star was read as "%", so "4.90 %" looked like a battery level and cut the window. A battery % now cannot follow a decimal point, and "%" counts as a rating mark. This came from my own k7 card, and a regression test was added.
+
+## New cases: `eval_set/synthetic_fare_zone_2.jsonl` (20 cases, syn-fz2-001 to 020, my own)
+- Label variants with the fare line lost and a stray amount above (Uber X, Uber Comfort, Uber Green, Uber-X, glued "UberX9.80").
+- Readable variants (Uber XL, Uber Exec, Uber, Uber X with a rider name, the "Uber X · Comfort" chip).
+- Rider-price captions (rider pays, customer pays, total paid).
+- Accept-line amounts above the legs, and Accept inside the zone.
+- A label 4 lines above the legs.
+- A cropped card with no label; a surge, badge and rating stack; a "You paid" push.
+
+The before-eval was saved first: `reports/cycle-2/eval_attempt2_before.json` (attempt-1 rules).
+
+## Numbers (synthetic, 140 cases, judged side)
+
+| metric | attempt 1 rules | attempt 2 rules |
+|---|---|---|
+| **wrong_number_count** (gated) | **10** | **0** |
+| false_accept_count | 9 | 0 |
+| readable_manual_rate (n = 95) | 0.0316 | 0.0 |
+| scan_accuracy_overall | 0.9814 | 1.0 |
+| verdict median / p90 | 0.0819 / 0.2214 | unchanged |
+
+- `pytest -q`: 87 passed. That includes JS parity on all 5 eval files, 29 adversarial texts and the Node geometry test.
+- Python vs JS on 3000 fuzzed texts: 0 differences in fields and warnings.
+- `--baseline reports/eval_baseline.json` and `--baseline reports/cycle-2/eval_before.json` both give no regression. All 92 earlier per-case rows are unchanged.
+- **Caveat:** I wrote these cases knowing the rules, so 0 here is not evidence on unseen cards. QA's new unseen set is the real check.
+
+## Real OCR through the app
+- **Setup:**
+  - The app was served with `python3 -m http.server 8776` from app/ and stopped afterwards.
+  - Cards were drawn in Playwright at 390×844, 2× scale, in light and dark, and scanned via `#scan-file`.
+  - 0 requests left the origin, and the page logged 0 errors.
+  - Scripts and raw results are in `reports/cycle-2/scan_ocr/` (`run.js`, `an.mjs`, `result.json`, `result_veto.json`).
+- **Verdicts:** use the app's default settings. "Truth" is the verdict on the card as drawn (CAN'T TELL when the fare isn't on it); "real" is the verdict on the fare the card would really have.
+
+| card (light and dark) | fare read by the app | app verdict | truth / real verdict |
+|---|---|---|---|
+| k1 plain UberX £12.40 | 12.40 / 12.40 | MARGINAL / MARGINAL | MARGINAL |
+| k2 fare white on a green badge, pill "£58.40" above | None / None (OCR lost the badge) | CAN'T TELL / CAN'T TELL | MARGINAL |
+| k3 misspelt "Uber X", pill "£63.20" above | 13.80 / 13.80 | MARGINAL / MARGINAL | MARGINAL |
+| k4 "£16.00 / Rider pays" caption under the £10.40 fare | 10.40 / 10.40 | MARGINAL / MARGINAL | MARGINAL |
+| k5 "Uber Comfort", fare on a green badge, pill above | None / None (badge lost) | CAN'T TELL / CAN'T TELL | ACCEPT |
+| k6 another card's "Accept £31.50" above an "Uber X" card | 8.20 / 8.20 | MARGINAL / MARGINAL | MARGINAL |
+| k7 no label, £11.60 | 11.60 / 11.60 | ACCEPT / ACCEPT | ACCEPT |
+| k8 fare not drawn, pill "£49.30" above | None / None | CAN'T TELL / CAN'T TELL | CAN'T TELL (real MARGINAL) |
+| k9 badge fare £9.80, pill above | None / None (badge lost) | CAN'T TELL / CAN'T TELL | ACCEPT |
+| k10 chip "UberX · Comfort" at the top, pill amount £47.20 drawn as plain bold text, card fare on a badge (lost by OCR) | None / None. **The text rules read 47.20 in both modes; the height check vetoed it.** | CAN'T TELL / CAN'T TELL | CAN'T TELL (real ACCEPT) |
+| k11 no label, pill amount £52.60 as plain bold text, fare line absent | None / None. **The text rules read 52.60; the height check vetoed it.** | CAN'T TELL / CAN'T TELL | CAN'T TELL (real MARGINAL) |
+
+- **False ACCEPTs: 0 of 22 scans.**
+- **The height check is doing real work.** In k10 and k11 the text rules are fooled under real OCR, and the app still refuses.
+  - In my first k10/k11 drawings the pill was white on black, and OCR never read it. The pills had to be redrawn as plain text to test the check at all.
+- **Readable cards sent to manual entry:**
+  - 6 of 16 scans (37.5%), all of them badge fares that Tesseract dropped (k2, k5, k9, both modes).
+  - Non-badge readable cards: 0 of 10.
+  - Over QA's 25% target only if real fares sit on a coloured badge. The badge loss itself is open; see below.
+- Scan time: 230-850 ms, headless desktop Chromium.
+
+## Open items and guesses about real layouts
+1. **Height check (a guess):** on a real Uber card the fare is the tallest text, at least 1.5 times the median line height and 25% taller than any other amount. If a real earnings pill or rider price is drawn as large as the fare, the check gives null: a refusal, never a wrong number. If the fare is lost and a stray amount is the tallest money line *and* the text rules pick that same amount, both signals agree on the wrong number. I could not produce that with my drawings.
+2. **Green-badge fares are lost by Tesseract** (8 of 8 badge scans here). The result is safe (CAN'T TELL) but costs manual entry. A fix would need local inversion of coloured regions before OCR (a third pass). I have not done it; it is image preprocessing, not a reading rule. Whether real Uber fares sit on a badge is unknown.
+3. **Pasted text with no label** keeps the lone-amount fallback (departure above). The risk is a double OCR loss (label and fare) plus a lone stray amount, with no geometry to catch it.
+4. **The label variants and the 3-line window** are guesses. A real card with more than 3 counted lines between the label and the pickup (rider name, address, notes) would be refused. That is safe, but it may raise the manual-entry rate on real screenshots.
+5. **Rider-price words** are English only.
+6. All figures are synthetic. Real, redacted screenshots are still the step that matters (human gate).

@@ -1,0 +1,226 @@
+{
+ "rows": [
+  {
+   "id": "k1_plain",
+   "dark": false,
+   "truth": 12.4,
+   "real": 12.4,
+   "ms": 846,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £12.40 · Pickup minutes 6 · Pickup miles 1.8 · Trip minutes 18 · Trip miles 7.2",
+   "text": "10:02 4G 61%\n\nUberX\n\n£12.40\n\n4.92 %\n\n6 mins (1.8 mi) away\n\n18 mins (7.2 mi) trip\n"
+  },
+  {
+   "id": "k1_plain",
+   "dark": true,
+   "truth": 12.4,
+   "real": 12.4,
+   "ms": 301,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £12.40 · Pickup minutes 6 · Pickup miles 1.8 · Trip minutes 18 · Trip miles 7.2",
+   "text": "10:02 4G 61%\n\nUberX\n\n£12.40\n\n4.92 %\n\n6 mins (1.8 mi) away\n\n18 mins (7.2 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k2_badge_pill",
+   "dark": false,
+   "truth": 14.2,
+   "real": 14.2,
+   "ms": 368,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 6 · Pickup miles 2.1 · Trip minutes 24 · Trip miles 9.8",
+   "text": "09:40 5G 72%\n\nGold\n\nUberX\n\n4.90 %\n\n6 mins (2.1 mi) away\n\n24 mins (9.8 mi) trip\n"
+  },
+  {
+   "id": "k2_badge_pill",
+   "dark": true,
+   "truth": 14.2,
+   "real": 14.2,
+   "ms": 432,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 6 · Pickup miles 2.1 · Trip minutes 24 · Trip miles 9.8",
+   "text": "09:40 5G 72%\n\nGold\n\nUberX\n\nan\n\n4.90 %\n\n6 mins (2.1 mi) away\n\n24 mins (9.8 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k3_misspelt_pill",
+   "dark": false,
+   "truth": 13.8,
+   "real": 13.8,
+   "ms": 301,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £13.80 · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 21 · Trip miles 8.9",
+   "text": "11:15 4G 55%\n\nToday\n\nUber X\n\n£13.80\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n21 mins (8.9 mi) trip\n"
+  },
+  {
+   "id": "k3_misspelt_pill",
+   "dark": true,
+   "truth": 13.8,
+   "real": 13.8,
+   "ms": 281,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £13.80 · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 21 · Trip miles 8.9",
+   "text": "11:15 4G 55%\n\nToday\n\nUber X\n\n£13.80\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n21 mins (8.9 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k4_rider_pays",
+   "dark": false,
+   "truth": 10.4,
+   "real": 10.4,
+   "ms": 271,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £10.40 · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 15 · Trip miles 5.9",
+   "text": "12:30 4G 80%\n\nUberX\n\n£10.40\n\n£16.00\n\nRider pays\n\n5 mins (1.7 mi) away\n\n15 mins (5.9 mi) trip\n"
+  },
+  {
+   "id": "k4_rider_pays",
+   "dark": true,
+   "truth": 10.4,
+   "real": 10.4,
+   "ms": 283,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £10.40 · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 15 · Trip miles 5.9",
+   "text": "12:30 4G 80%\n\nUberX\n\n£10.40\n\n£16.00\n\nRider pays\n\n5 mins (1.7 mi) away\n\n15 mins (5.9 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k5_badge_misspelt",
+   "dark": false,
+   "truth": 15.6,
+   "real": 15.6,
+   "ms": 498,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 4 · Pickup miles 1.6 · Trip minutes 20 · Trip miles 8.5",
+   "text": "13:05 5G 47%\n\nOnline\n\nUber Comfort\n\n4.93 %\n\n4 mins (1.6 mi) away\n\n20 mins (8.5 mi) trip\n"
+  },
+  {
+   "id": "k5_badge_misspelt",
+   "dark": true,
+   "truth": 15.6,
+   "real": 15.6,
+   "ms": 415,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 4 · Pickup miles 1.6 · Trip minutes 20 · Trip miles 8.5",
+   "text": "13:05 5G 47%\n\nOnline\n\nUber Comfort\n\nan\n\n4.93 %\n\n4 mins (1.6 mi) away\n\n20 mins (8.5 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k6_other_accept",
+   "dark": false,
+   "truth": 8.2,
+   "real": 8.2,
+   "ms": 231,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £8.20 · Pickup minutes 4 · Pickup miles 1.2 · Trip minutes 13 · Trip miles 4.6",
+   "text": "14:20 4G 63%\n\nUber X\n\n£8.20\n\n4.92 %\n\n4 mins (1.2 mi) away\n\n13 mins (4.6 mi) trip\n"
+  },
+  {
+   "id": "k6_other_accept",
+   "dark": true,
+   "truth": 8.2,
+   "real": 8.2,
+   "ms": 279,
+   "word": "MARGINAL",
+   "readout": "Read from the card: Fare shown £8.20 · Pickup minutes 4 · Pickup miles 1.2 · Trip minutes 13 · Trip miles 4.6",
+   "text": "14:20 4G 63%\n\nUber X\n\n£8.20\n\n4.92 %\n\n4 mins (1.2 mi) away\n\n13 mins (4.6 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k7_no_label",
+   "dark": false,
+   "truth": 11.6,
+   "real": 11.6,
+   "ms": 234,
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £11.60 · Pickup minutes 4 · Pickup miles 1.5 · Trip minutes 14 · Trip miles 5.5",
+   "text": "15:45 4G 39%\n\n£11.60\n\n4.90 %\n\n4 mins (1.5 mi) away\n\n14 mins (5.5 mi) trip\n"
+  },
+  {
+   "id": "k7_no_label",
+   "dark": true,
+   "truth": 11.6,
+   "real": 11.6,
+   "ms": 264,
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £11.60 · Pickup minutes 4 · Pickup miles 1.5 · Trip minutes 14 · Trip miles 5.5",
+   "text": "15:45 4G 39%\n\n£11.60\n\n4.90 %\n\n4 mins (1.5 mi) away\n\n14 mins (5.5 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k8_fare_absent",
+   "dark": false,
+   "truth": null,
+   "real": 12.9,
+   "ms": 414,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.9 · Trip minutes 17 · Trip miles 7.3",
+   "text": "16:10 5G 58%\n\nPlatinum\n\nUberX\n\n4.89 %\n\n5 mins (1.9 mi) away\n\n17 mins (7.3 mi) trip\n"
+  },
+  {
+   "id": "k8_fare_absent",
+   "dark": true,
+   "truth": null,
+   "real": 12.9,
+   "ms": 401,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.9 · Trip minutes 17 · Trip miles 7.3",
+   "text": "16:10 5G 58%\n\nPlatinum\n\nUberX\n\n4.89 %\n\n5 mins (1.9 mi) away\n\n17 mins (7.3 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k10_chip_badge",
+   "dark": false,
+   "truth": null,
+   "real": 12.7,
+   "ms": 399,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.8 · Trip minutes 17 · Trip miles 7.1",
+   "text": "18:10 4G 52%\n\nUberX - Comfort\n\n4.91 %\n\n5 mins (1.8 mi) away\n\n17 mins (7.1 mi) trip\n"
+  },
+  {
+   "id": "k10_chip_badge",
+   "dark": true,
+   "truth": null,
+   "real": 12.7,
+   "ms": 414,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.8 · Trip minutes 17 · Trip miles 7.1",
+   "text": "18:10 4G 52%\n\nUberX - Comfort\n\nan\n\n4.91 %\n\n5 mins (1.8 mi) away\n\n17 mins (7.1 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k11_pill_no_label",
+   "dark": false,
+   "truth": null,
+   "real": 11.3,
+   "ms": 416,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.2",
+   "text": "19:25 5G 61%\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n16 mins (6.2 mi) trip\n"
+  },
+  {
+   "id": "k11_pill_no_label",
+   "dark": true,
+   "truth": null,
+   "real": 11.3,
+   "ms": 337,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.2",
+   "text": "19:25 5G 61%\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n16 mins (6.2 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k9_badge_glued",
+   "dark": false,
+   "truth": 9.8,
+   "real": 9.8,
+   "ms": 383,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 4 · Pickup miles 1.3 · Trip minutes 13 · Trip miles 5",
+   "text": "17:00 4G 44%\n\nStreak\n\nUberX\n\n4.86 %\n\n4 mins (1.3 mi) away\n\n13 mins (5.0 mi) trip\n"
+  },
+  {
+   "id": "k9_badge_glued",
+   "dark": true,
+   "truth": 9.8,
+   "real": 9.8,
+   "ms": 419,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 4 · Pickup miles 1.3 · Trip minutes 13 · Trip miles 5",
+   "text": "17:00 4G 44%\n\nStreak\n\nUberX\n\na\n\n4.86 %\n\n4 mins (1.3 mi) away\n\n13 mins (5.0 mi) trip\n\n=\n"
+  }
+ ],
+ "ext": [],
+ "errs": []
+}

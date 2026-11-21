@@ -1,4 +1,4 @@
-import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS } from "./engine.js";
+import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromLines, reconcileScanFare } from "./engine.js";
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
 import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd } from "./demand.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
@@ -75,8 +75,11 @@ let verdictSig = "";
 let offerGen = 0, verdictGen = -1;
 // Scan state shown in the verdict card: null, "reading" or "failed". scanSeq drops stale OCR results.
 let scanState = null, scanSeq = 0;
+// Text heights from the last screenshot's OCR, for the text that pass produced. The height check only
+// applies while lastText is still exactly that text (editing the box makes it pasted text again).
+let scanGeo = null; // { text, lines: [{ text, height }] }
 const MAX_TEXT = 5000; // cap pasted or OCR text before parsing (huge pastes froze the page)
-const cancelScan = () => { scanSeq++; scanState = null; };
+const cancelScan = () => { scanSeq++; scanState = null; scanGeo = null; };
 
 function renderCheck() {
   const s = settings();
@@ -193,6 +196,8 @@ function updateCheck() {
     o = manualOffer({ fare: n("#m-fare"), pickup_min: n("#m-pmin"), pickup_miles: n("#m-pmi"), trip_min: n("#m-tmin"), trip_miles: n("#m-tmi") });
   } else {
     o = parseOfferText(lastText);
+    // Screenshot: the fare must also be the tallest amount on screen, or it goes to manual entry.
+    if (scanGeo && scanGeo.text === lastText) o = reconcileScanFare(o, fareFromLines(scanGeo.lines));
     // What was read from the card has numbers in it, so it lives inside Details too (SAFETY.md).
     readout = lastText.trim() ? `<p class="readout">${esc(t("check.read"))}: ` + Object.keys(FIELD).map((k) =>
       o[k] === null ? `<span class="miss">${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))}: ${esc(t("check.notFound"))}</span>`
@@ -312,10 +317,12 @@ async function scanImage(file) {
   const my = ++scanSeq;
   offerGen++;
   lastText = "";
-  const finish = (state, text = "") => {
+  scanGeo = null;
+  const finish = (state, text = "", lines = null) => {
     if (my !== scanSeq) return; // a newer scan (or typed input) has taken over
     scanState = state;
     lastText = text;
+    scanGeo = lines ? { text, lines } : null;
     if (!$("#verdict")) return; // Check screen not open: renderCheck shows this state when it is
     $("#ocr").value = text;
     $("#scan-status").textContent = state === "failed" ? t("check.scanFailed") : "";
@@ -329,17 +336,23 @@ async function scanImage(file) {
     const worker = await getOcrWorker();
     const bmp = await createImageBitmap(file);
     // Pass 1: full size, cleaned to black-on-white, read as scattered text (an offer card isn't prose).
+    // Each pass keeps its text and its line heights (bbox y1 - y0) for the fare height check.
+    const read = async (scale) => {
+      const d = (await worker.recognize(prepareForOcr(bmp, scale), {}, { text: true, blocks: true })).data || {};
+      const lines = (d.lines || []).map((l) => ({ text: l.text || "", height: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0 }));
+      return { text: (d.text || "").slice(0, MAX_TEXT), lines };
+    };
     await worker.setParameters({ tessedit_pageseg_mode: "11" });
-    let text = ((await worker.recognize(prepareForOcr(bmp, 1))).data.text || "").slice(0, MAX_TEXT);
+    let pass = await read(1);
     // Pass 2, only if something is missing: half size, read as a page. Keep whichever found more.
-    if (parseOfferText(text).missing.length) {
+    if (parseOfferText(pass.text).missing.length) {
       await worker.setParameters({ tessedit_pageseg_mode: "3" });
-      const alt = ((await worker.recognize(prepareForOcr(bmp, 0.5))).data.text || "").slice(0, MAX_TEXT);
-      if (parseOfferText(alt).missing.length < parseOfferText(text).missing.length) text = alt;
+      const alt = await read(0.5);
+      if (parseOfferText(alt.text).missing.length < parseOfferText(pass.text).missing.length) pass = alt;
     }
     if (bmp.close) bmp.close();
-    if (parseOfferText(text).missing.length === 5) finish("failed");
-    else finish(null, text);
+    if (parseOfferText(pass.text).missing.length === 5) finish("failed");
+    else finish(null, pass.text, pass.lines);
   } catch {
     finish("failed");
   } finally {

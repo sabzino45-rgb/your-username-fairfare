@@ -80,3 +80,45 @@ def test_label_list_variants():
     for label in ("Comfort Electric", "Uber X Share", "Uber Pet", "UberX · Exclusive", "WAV", "Taxi", "Exec"):
         o = parse_offer_text(f"£50.00\nPro status\n{label}\n£12.10\n" + LEGS)
         assert o.fare == 12.10, label
+
+
+# ---- Attempt 2 (text path): label variants, window, Accept below the legs, rider price ----
+
+def test_label_variants_close_the_zone():
+    for label in ("Uber X", "Uber-X", "Uber XL", "Uber Comfort", "Uber Exec", "Uber Green", "Uber", "X",
+                  "UberX9.80", "UberX E9.80", "Uber X · Comfort"):
+        o = parse_offer_text(f"10:00 4G 70%\n£44.10\n{label}\n4.9 ★\n" + LEGS)
+        assert o.fare is None, label
+    assert parse_offer_text("£44.10\nUber Comfort\n£12.10\n4.9 ★\n" + LEGS).fare == 12.10
+
+
+def test_label_more_than_three_lines_above_the_legs_gives_no_fare():
+    o = parse_offer_text("Black\nGoal\n£64.00\nKeep going\nNice work\n4.9 ★\n" + LEGS)
+    assert o.fare is None and "fare_label_too_far" in o.warnings
+    # Ratings and badge-only lines don't count towards the 3.
+    o = parse_offer_text("UberX\n£16.30\n+£2.40 surge included\nExclusive\n4.89 ★\n" + LEGS)
+    assert o.fare == 16.30
+
+
+def test_accept_amount_counts_only_below_the_legs():
+    assert parse_offer_text("Accept £27.80\n4.91 ★\n" + LEGS).fare is None        # no label
+    assert parse_offer_text("Comfort\nAccept £22.10\n4.9 ★\n" + LEGS).fare is None  # inside the zone
+    assert parse_offer_text("Comfort\n4.9 ★\n" + LEGS + "\nAccept £12.10").fare == 12.10
+
+
+def test_rider_price_is_never_the_fare():
+    for cap in ("Rider pays", "Customer pays", "You paid", "Total paid", "Rider price"):
+        o = parse_offer_text(f"UberX\n£17.20\n{cap}\n4.9 ★\n" + LEGS)
+        assert o.fare is None, cap
+    assert parse_offer_text("UberX\nCustomer pays\n£18.00\n£12.10\n4.9 ★\n" + LEGS).fare == 12.10
+
+
+def test_no_label_needs_a_lone_amount():
+    assert parse_offer_text("£11.60\n4.9 ★\n" + LEGS).fare == 11.60
+    assert parse_offer_text("£11.60\n£12.60\n4.9 ★\n" + LEGS).fare is None
+
+
+def test_rating_star_read_as_percent_is_not_a_status_bar():
+    # Real OCR (dark mode) read "4.90 ★" as "4.90 %"; it must not cut the no-label window.
+    assert parse_offer_text("15:45 4G 39%\n\n£11.60\n\n4.90 %\n\n" + LEGS).fare == 11.60
+    assert parse_offer_text("£31.50\n87 %\n4.9 ★\n" + LEGS).fare is None  # a real battery level still cuts

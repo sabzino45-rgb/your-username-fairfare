@@ -53,7 +53,7 @@ const NOT_FARE = new RegExp(
 // A card's fare line holds the amount and nothing else that reads as words: only punctuation,
 // ride-type names or the Accept button may stand before or after it; a leg may follow on the line.
 const FARE_WORDS = "(?:[^A-Za-z0-9]|\\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|" +
-  "lux|black|electric|priority|saver|wav|access|assist|accept)\\b)*";
+  "lux|black|electric|priority|saver|wav|access|assist|accept|x|share|taxi)\\b)*";
 const FARE_PREFIX_OK = new RegExp("^" + FARE_WORDS + "$", "i");
 const FARE_TRAIL_OK = FARE_PREFIX_OK;
 const ACCEPT = /\baccept\b/i;
@@ -83,8 +83,10 @@ const LEG_SRC = "(?:([0-9]+)[ \\t]*(?:hours?|hrs?|h)(?![A-Za-z])[ \\t]*(?:([0-9]
 const RATING = new RegExp(NUM + "\\s*[★*]");
 // Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
 // "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
-const PRODUCT_NAMES = "uber[ \\t]+x[ \\t]+share|uber[ \\t]+pet|comfort[ \\t]+electric|uberxl|uberx|xl|comfort|" +
-  "green|exec|executive|lux|black|pet|access|assist|wav|exclusive|priority|share|electric|taxi";
+// Attempt 2: "Uber" may stand before any name ("Uber X", "Uber-X", "Uber Comfort"); "Uber" or "X" alone count too.
+const PRODUCT_CORE = "x[ \\t]+share|comfort[ \\t]+electric|xl|x|comfort|green|exec|executive|lux|black|pet|access|" +
+  "assist|wav|exclusive|priority|share|electric|taxi";
+const PRODUCT_NAMES = "uber[ \\t-]*(?:" + PRODUCT_CORE + ")|uber|" + PRODUCT_CORE;
 // A product-label line: only names from that list, separators, and optionally the fare amount.
 const PRODUCT_LABEL = new RegExp(
   "^(?:[^A-Za-z0-9£]|£[ \\t]?[0-9OoIl]+(?:[.,][0-9OoIl]{1,2})?|\\b(?:" + PRODUCT_NAMES + ")\\b)*$", "i");
@@ -92,6 +94,14 @@ const PRODUCT_LABEL = new RegExp(
 // below the fare, so it is card text but never the anchor.
 const PRODUCT_BADGES = /\b(?:exclusive|priority)\b/gi;
 const PRODUCT_WORD = new RegExp("\\b(?:" + PRODUCT_NAMES + ")\\b", "i");
+// A label glued to the (unreadable) fare: "UberX9.80", "UberXE12.40", "UberX E12.40".
+const GLUED_LABEL = /^[^A-Za-z0-9]*uber[ \t-]*xl?[ \t]?[A-Za-z]?[ \t]?[0-9£€$]/i;
+// At most this many non-blank lines between the label and the first leg (ratings and badge-only lines
+// not counted). A label further up is not this card's: no fare.
+const ZONE_MAX_LINES = 3;
+// A rider-price caption: the amount on the line, or next to it, is what the rider pays.
+const RIDER_PRICE = /\b(?:riders?|customer pays|you paid|total paid)\b/i;
+const RATING_ONLY = /^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[★*xX%]?[^A-Za-z0-9£]*$/;
 // Card text: once numbers (with OCR's O/o/I/l), these words and lone letters are removed, a card-text
 // line holds only ASCII punctuation, spaces and a few symbols. Any other letter, in any script, means
 // ordinary words (notification, pill, banner). A status-bar line (clock or battery %) isn't card text.
@@ -101,11 +111,16 @@ const CARD_WORDS = new RegExp(
 const LONE_LETTER = /\b[A-Za-z]\b/g;
 const OCR_NUMBER = /[0-9OoIl]*[0-9][0-9OoIl]*/g; // "4.9l", "£1O.80": digits OCR misread
 const CARD_CHARS = /^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013\u2014\u2022\u200e\u200f\u20ac\u2605]*$/;
-const STATUS_BAR = /(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|[0-9]{1,3}[ \t]?%/;
-const productLabelLine = (line) => PRODUCT_WORD.test(line.replace(PRODUCT_BADGES, " ")) && PRODUCT_LABEL.test(line);
+// A battery % never follows a decimal point: "4.90 %" is a rating whose star OCR read as "%".
+const STATUS_BAR = /(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|(?:^|[^0-9.,])[0-9]{1,3}[ \t]?%/;
+const productLabelLine = (line) =>
+  GLUED_LABEL.test(line) || (PRODUCT_WORD.test(line.replace(PRODUCT_BADGES, " ")) && PRODUCT_LABEL.test(line));
 const cardTextLine = (line) =>
   !STATUS_BAR.test(line) && CARD_CHARS.test(line.replace(OCR_NUMBER, " ").replace(CARD_WORDS, "").replace(LONE_LETTER, ""));
 const isBlank = (line) => /^[ \t\r\f\v]*$/.test(line);
+// A non-blank line that counts towards ZONE_MAX_LINES (not a rating, not a badge-only line).
+const windowCounted = (line) => !isBlank(line) && !RATING_ONLY.test(line) &&
+  !(/\b(?:exclusive|priority)\b/i.test(line) && PRODUCT_LABEL.test(line));
 const hasDigit = (s) => /[0-9]/.test(s);
 const matchAt = (re, text, pos) => { re.lastIndex = pos; return re.exec(text); };
 
@@ -164,7 +179,7 @@ function fareFromZone(o, L, fares, label, anchorLine, first, last) {
   for (let n = lastLine + 1; n < nLines; n++) if (ACCEPT.test(L.line(n))) { acceptLine = n; break; }
   const cardEnd = acceptLine !== null ? acceptLine : nLines;
   const zoneStart = L.starts[label];
-  const zone = fares.filter((c) => zoneStart <= c[0] && c[0] < first);
+  const zone = fares.filter((c) => zoneStart <= c[0] && c[0] < first && !c[3]); // Accept counts only below the legs
   const accept = fares.filter((c) => acceptLine !== null && L.no(c[0]) === acceptLine);
   const below = fares.filter((c) => c[0] > last && L.no(c[0]) < cardEnd);
   let garbled = false;
@@ -186,6 +201,8 @@ function fareWithoutLabel(o, L, allFares, used, first, anchorLine) {
   let cut = -1;
   for (let n = anchorLine - 1; n >= 0; n--) if (!isBlank(L.line(n)) && !cardTextLine(L.line(n))) { cut = n; break; }
   const fares = allFares.filter((c) => L.no(c[0]) > cut);
+  if (fares.some((c) => c[3] && c[0] < first)) { o.warnings.push("fare_ambiguous"); return; } // another card's Accept
+  if (new Set(fares.map((c) => c[2])).size > 1) { o.warnings.push("fare_ambiguous"); return; } // only a lone amount
   const anchorNb = L.nb[anchorLine];
   const plaus = fares.filter((c) => plausible(c[2], used));
   const onAccept = new Set(plaus.filter((c) => c[3]).map((c) => c[2]));
@@ -283,6 +300,7 @@ export function parseOfferText(text) {
     const legOnLine = legs.find((l) => end <= l[3] && l[3] < lineEnd);
     if (!FARE_TRAIL_OK.test(text.slice(end, legOnLine ? legOnLine[3] : lineEnd))) continue;
     if (L.neighbours(n).some((x) => PILL_LABEL.test(x))) continue;
+    if (RIDER_PRICE.test(line) || L.neighbours(n).some((x) => RIDER_PRICE.test(x))) continue; // the rider's price
     rangeSeen = rangeSeen || !!rng;
     fares.push([m.index, L.nb[n], value, ACCEPT.test(line)]);
   }
@@ -293,7 +311,10 @@ export function parseOfferText(text) {
     const anchorLine = L.no(first);
     let label = null;
     for (let n = anchorLine - 1; n >= 0; n--) if (productLabelLine(L.line(n))) { label = n; break; }
-    if (label !== null) fareFromZone(o, L, fares, label, anchorLine, first, last);
+    let counted = 0;
+    if (label !== null) for (let n = label + 1; n < anchorLine; n++) if (windowCounted(L.line(n))) counted++;
+    if (label !== null && counted > ZONE_MAX_LINES) o.warnings.push("fare_label_too_far"); // not this card's label
+    else if (label !== null) fareFromZone(o, L, fares, label, anchorLine, first, last);
     else fareWithoutLabel(o, L, fares, used, first, anchorLine);
   } else if (fares.length) {
     let values = new Set(fares.filter((c) => c[3]).map((c) => c[2]));
@@ -333,6 +354,61 @@ export function parseOfferText(text) {
   }
   o.missing = REQUIRED.filter((k) => o[k] === null);
   if (o.missing.length) o.warnings.push("needs_manual_entry");
+  return o;
+}
+
+// ---- Second signal for screenshots (attempt 2): text height. On a real offer card the fare is by far the
+// tallest text on screen; pills, notifications and captions are small. Pure function, no DOM.
+// lines: [{text, height}] from the OCR (height = bbox y1 - y0, any scale). Returns the fare or null.
+// The fare is the £ amount on the tallest line that holds a money-shaped amount, only if:
+//   - that line is at least GEO_MEDIAN_RATIO (1.5) times the median height of all text lines, and
+//   - it is at least GEO_MARGIN (1.25) times as tall as every other money-shaped line (25% margin), and
+//   - it holds exactly one distinct £ amount (not a rate "£1.10/mi", not an add-on "+£2.00").
+// A money-shaped line without a £ (a misread "E14.20", a rating "4.92") can be the tallest: then null.
+export const GEO_MEDIAN_RATIO = 1.5, GEO_MARGIN = 1.25;
+const MONEY_SHAPED = /(?:^|[^0-9A-Za-z.,])[0-9OoIl]{1,3}[.,][0-9OoIl]{2}(?![0-9])/;
+export function fareFromLines(lines) {
+  if (!Array.isArray(lines)) return null;
+  const rows = [];
+  for (const l of lines) {
+    const text = unicodeDigits(String((l && l.text) || "")).replace(/[\r\n]+/g, " ");
+    const h = Number(l && l.height);
+    if (text.trim() && Number.isFinite(h) && h > 0) rows.push({ text, h });
+  }
+  if (rows.length < 3) return null;
+  const hs = rows.map((r) => r.h).sort((a, b) => a - b);
+  const k = hs.length >> 1;
+  const median = hs.length % 2 ? hs[k] : (hs[k - 1] + hs[k]) / 2;
+  const money = rows.filter((r) => MONEY_SHAPED.test(r.text) || new RegExp(FARE_SRC).test(r.text));
+  if (!money.length) return null;
+  let top = money[0];
+  for (const r of money) if (r.h > top.h) top = r;
+  if (top.h < GEO_MEDIAN_RATIO * median) return null;
+  if (money.some((r) => r !== top && r.h * GEO_MARGIN > top.h)) return null;
+  const values = new Set();
+  const re = new RegExp(FARE_SRC, "g");
+  let m;
+  while ((m = re.exec(top.text))) {
+    if (!hasDigit(m[1])) continue;
+    const end = m.index + m[0].length;
+    if (matchAt(RATE_AFTER, top.text, end)) continue; // "£1.10/mi"
+    if (top.text.slice(0, m.index).trimEnd().endsWith("+")) continue; // "+£2.00" add-on
+    values.add(f(ocrDigits(m[1])));
+  }
+  return values.size === 1 ? [...values][0] : null;
+}
+
+// Screenshot scans: the text rules' fare and the height fare must agree, or the fare goes to manual entry.
+// geoFare undefined means no geometry (pasted text): the text rules alone decide.
+export function reconcileScanFare(offer, geoFare) {
+  if (geoFare === undefined) return offer;
+  const o = { ...offer, warnings: [...offer.warnings] };
+  if (o.fare === null || geoFare === null || Math.abs(o.fare - geoFare) > 0.005) {
+    if (o.fare !== null || geoFare !== null) o.warnings.push("fare_height_disagrees");
+    o.fare = null;
+    o.missing = REQUIRED.filter((x) => o[x] === null);
+    if (!o.warnings.includes("needs_manual_entry")) o.warnings.push("needs_manual_entry");
+  }
   return o;
 }
 

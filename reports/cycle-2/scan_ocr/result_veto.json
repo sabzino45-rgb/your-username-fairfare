@@ -1,0 +1,46 @@
+{
+ "rows": [
+  {
+   "id": "k10_chip_badge",
+   "dark": false,
+   "truth": null,
+   "real": 12.7,
+   "ms": 833,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.8 · Trip minutes 17 · Trip miles 7.1",
+   "text": "18:10 4G 52%\n\nUberX - Comfort\n\n£47.20\n\n4.91 %\n\n5 mins (1.8 mi) away\n\n17 mins (7.1 mi) trip\n"
+  },
+  {
+   "id": "k10_chip_badge",
+   "dark": true,
+   "truth": null,
+   "real": 12.7,
+   "ms": 314,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.8 · Trip minutes 17 · Trip miles 7.1",
+   "text": "18:10 4G 52%\n\nUberX - Comfort\n\n£47.20\n\nan\n\n4.91 %\n\n5 mins (1.8 mi) away\n\n17 mins (7.1 mi) trip\n\n=\n"
+  },
+  {
+   "id": "k11_pill_no_label",
+   "dark": false,
+   "truth": null,
+   "real": 11.3,
+   "ms": 249,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.2",
+   "text": "19:25 5G 61%\n\n£52.60\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n16 mins (6.2 mi) trip\n"
+  },
+  {
+   "id": "k11_pill_no_label",
+   "dark": true,
+   "truth": null,
+   "real": 11.3,
+   "ms": 249,
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.2",
+   "text": "19:25 5G 61%\n\n£52.60\n\n4.88 %\n\n5 mins (1.7 mi) away\n\n16 mins (6.2 mi) trip\n\n=\n"
+  }
+ ],
+ "ext": [],
+ "errs": []
+}

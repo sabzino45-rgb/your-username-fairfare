@@ -77,7 +77,7 @@ _NOT_FARE = re.compile(
 # "£9.15 · UberX", "Accept £10.20"); a leg may follow on the same line ("£7.20 · 3 min (1.0 mi)").
 # Anything else ("£30 for the shopping", "£25.00 from Sam") is a message, banner or notification.
 _FARE_WORDS = (r"(?:[^A-Za-z0-9]|\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|"
-               r"lux|black|electric|priority|saver|wav|access|assist|accept)\b)*")
+               r"lux|black|electric|priority|saver|wav|access|assist|accept|x|share|taxi)\b)*")
 _FARE_PREFIX_OK = re.compile("^" + _FARE_WORDS + "$", re.I | re.ASCII)
 _FARE_TRAIL_OK = _FARE_PREFIX_OK
 _ACCEPT = re.compile(r"\baccept\b", re.I | re.ASCII)
@@ -114,8 +114,11 @@ _LEG = re.compile(
 _RATING = re.compile(_NUM + r"\s*[★*]")
 # Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
 # "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
-_PRODUCT_NAMES = (r"uber[ \t]+x[ \t]+share|uber[ \t]+pet|comfort[ \t]+electric|uberxl|uberx|xl|comfort|"
-                  r"green|exec|executive|lux|black|pet|access|assist|wav|exclusive|priority|share|electric|taxi")
+# Attempt 2: "Uber" may stand before any name, with or without a space or hyphen ("Uber X", "Uber-X",
+# "Uber Comfort"), and "Uber" or "X" alone also count: a misread label must still close the zone.
+_PRODUCT_CORE = (r"x[ \t]+share|comfort[ \t]+electric|xl|x|comfort|green|exec|executive|lux|black|pet|access|"
+                 r"assist|wav|exclusive|priority|share|electric|taxi")
+_PRODUCT_NAMES = r"uber[ \t-]*(?:" + _PRODUCT_CORE + r")|uber|" + _PRODUCT_CORE
 # A product-label line: only names from that list, separators, and optionally the fare amount.
 _PRODUCT_LABEL = re.compile(
     r"^(?:[^A-Za-z0-9£]|£[ \t]?[0-9OoIl]+(?:[.,][0-9OoIl]{1,2})?|\b(?:" + _PRODUCT_NAMES + r")\b)*$", re.I | re.ASCII)
@@ -123,6 +126,14 @@ _PRODUCT_LABEL = re.compile(
 # below the fare ("£13.75" / "Exclusive" / legs), so it is card text but never the anchor.
 _PRODUCT_BADGES = re.compile(r"\b(?:exclusive|priority)\b", re.I | re.ASCII)
 _PRODUCT_WORD = re.compile(r"\b(?:" + _PRODUCT_NAMES + r")\b", re.I | re.ASCII)
+# A label glued to the (unreadable) fare: "UberX9.80", "UberX12.40", "UberXE12.40", "UberX E12.40".
+_GLUED_LABEL = re.compile(r"^[^A-Za-z0-9]*uber[ \t-]*xl?[ \t]?[A-Za-z]?[ \t]?[0-9£€$]", re.I | re.ASCII)
+# At most this many non-blank lines between the label and the first leg (rating-only and
+# badge-only lines are not counted). A label further up is not this card's: no fare.
+_ZONE_MAX_LINES = 3
+# A rider-price caption: the amount on the line, or next to it, is what the rider pays.
+_RIDER_PRICE = re.compile(r"\b(?:riders?|customer pays|you paid|total paid)\b", re.I | re.ASCII)
+_RATING_ONLY = re.compile(r"^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[★*xX%]?[^A-Za-z0-9£]*$", re.ASCII)
 # Card text: once numbers (with OCR's O/o/I/l), the words below (product names, units, leg labels,
 # the Accept button, surge/boost lines, rate lines) and lone letters ("4.89 x", "E11.10") are
 # removed, a card-text line holds only ASCII punctuation, spaces and a few symbols (£ · – — • € ★,
@@ -135,7 +146,8 @@ _LONE_LETTER = re.compile(r"\b[A-Za-z]\b", re.ASCII)
 _OCR_NUMBER = re.compile(r"[0-9OoIl]*[0-9][0-9OoIl]*", re.ASCII)  # "4.9l", "£1O.80": digits OCR misread
 _CARD_CHARS = re.compile(r"^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013\u2014\u2022\u200e\u200f\u20ac\u2605]*$")
 # A status-bar line: a clock ("14:05") or a battery level ("87%").
-_STATUS_BAR = re.compile(r"(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|[0-9]{1,3}[ \t]?%", re.ASCII)
+# A battery % never follows a decimal point: "4.90 %" is a rating whose star OCR read as "%".
+_STATUS_BAR = re.compile(r"(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|(?:^|[^0-9.,])[0-9]{1,3}[ \t]?%", re.ASCII)
 
 
 def _f(s: str) -> float:
@@ -192,7 +204,16 @@ def _garbled_fare_line(line: str) -> bool:
 
 
 def _product_label_line(line: str) -> bool:
+    if _GLUED_LABEL.match(line):
+        return True
     return bool(_PRODUCT_WORD.search(_PRODUCT_BADGES.sub(" ", line))) and bool(_PRODUCT_LABEL.match(line))
+
+
+def _window_counted(line: str) -> bool:
+    """A non-blank line that counts towards _ZONE_MAX_LINES (not a rating, not a badge-only line)."""
+    if _BLANK.match(line) or _RATING_ONLY.match(line):
+        return False
+    return not (_PRODUCT_BADGES.search(line) and _PRODUCT_LABEL.match(line))
 
 
 def _card_text_line(line: str) -> bool:
@@ -230,7 +251,7 @@ def _fare_from_zone(offer: Offer, lines: _Lines, fares: list, label: int, anchor
     accept_line = next((n for n in range(last_line + 1, n_lines) if _ACCEPT.search(lines.line(n))), None)
     card_end = accept_line if accept_line is not None else n_lines
     zone_start = lines.starts[label]
-    zone = [c for c in fares if zone_start <= c[0] < first]
+    zone = [c for c in fares if zone_start <= c[0] < first and not c[3]]  # Accept counts only below the legs
     accept = [c for c in fares if accept_line is not None and lines.no(c[0]) == accept_line]
     below = [c for c in fares if c[0] > last and lines.no(c[0]) < card_end]
     garbled = any(_garbled_fare_line(lines.line(n)) for n in range(label + 1, anchor_line))
@@ -252,10 +273,18 @@ def _fare_from_zone(offer: Offer, lines: _Lines, fares: list, label: int, anchor
 def _fare_without_label(offer: Offer, lines: _Lines, fares: list, used: list, first: int,
                         anchor_line: int) -> None:
     """No product label: the cycle-1 rules, but the window stops at the nearest line above the legs
-    that is not card text (status bar, notification, pill, banner); nothing at or above it counts."""
+    that is not card text (status bar, notification, pill, banner); nothing at or above it counts.
+    Attempt 2: below that cut-off there must be exactly one distinct amount, and an Accept line
+    above the legs (another card's) refuses."""
     cut = next((n for n in range(anchor_line - 1, -1, -1)
                 if not _BLANK.match(lines.line(n)) and not _card_text_line(lines.line(n))), -1)
     fares = [c for c in fares if lines.no(c[0]) > cut]
+    if any(c[3] and c[0] < first for c in fares):
+        offer.warnings.append("fare_ambiguous")  # an Accept line above the legs: another card's
+        return
+    if len({c[2] for c in fares}) > 1:
+        offer.warnings.append("fare_ambiguous")  # no label: only a lone amount may be the fare
+        return
     anchor_nb = lines.nb[anchor_line]
     plausible = [c for c in fares if _plausible(c[2], used)]
     on_accept = {c[2] for c in plausible if c[3]}
@@ -366,6 +395,8 @@ def parse_offer_text(text: str) -> Offer:
             continue
         if any(_PILL_LABEL.search(nb) for nb in lines.neighbours(n)):
             continue
+        if _RIDER_PRICE.search(line) or any(_RIDER_PRICE.search(nb) for nb in lines.neighbours(n)):
+            continue  # the rider's price, not the driver's fare
         range_seen = range_seen or bool(rng)
         fares.append((m.start(), lines.nb[n], value, bool(_ACCEPT.search(line))))
 
@@ -375,7 +406,9 @@ def parse_offer_text(text: str) -> Offer:
             return _refuse_all(offer, "multiple_offers")  # a second fare between the legs: stacked offers
         anchor_line = lines.no(first)
         label = next((n for n in range(anchor_line - 1, -1, -1) if _product_label_line(lines.line(n))), None)
-        if label is not None:
+        if label is not None and sum(_window_counted(lines.line(n)) for n in range(label + 1, anchor_line)) > _ZONE_MAX_LINES:
+            offer.warnings.append("fare_label_too_far")  # the nearest label is not this card's: no fare
+        elif label is not None:
             _fare_from_zone(offer, lines, fares, label, anchor_line, first, last)
         else:
             _fare_without_label(offer, lines, fares, used, first, anchor_line)
