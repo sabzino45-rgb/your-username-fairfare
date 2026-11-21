@@ -101,6 +101,18 @@ const GLUED_LABEL = /^[^A-Za-z0-9]*uber[ \t-]*xl?[ \t]?[A-Za-z]?[ \t]?[0-9£€$
 const ZONE_MAX_LINES = 3;
 // A rider-price caption: the amount on the line, or next to it, is what the rider pays.
 const RIDER_PRICE = /\b(?:riders?|customer pays|you paid|total paid)\b/i;
+// Attempt 3: a promo/reward caption on the amount's line or the next/previous non-blank line means the amount
+// is a promo, reward or earnings figure. A surge/boost "included" line (SURGE) is card text, not a caption.
+const PROMO_CAPTION = /\b(?:bonus|promo|reward|rewards|streak|quest|extra|earn|earns|earned|earning|earnings|boost)\b/i;
+// A promo/reward caption line: a promo word, no £ amount of its own, not a surge/boost-included line.
+const caption = (line) => PROMO_CAPTION.test(line) && !line.includes("£") && !SURGE.test(line);
+// The amount on line n has a caption just below it, or just above it (unless that caption already sits
+// directly under another £ amount, which it then belongs to).
+function promoCaptioned(L, n) {
+  const k = L.nb[n], nb = (j) => L.line(L.nonblank[j]);
+  if (k + 1 < L.nonblank.length && caption(nb(k + 1))) return true;
+  return k >= 1 && caption(nb(k - 1)) && !(k >= 2 && nb(k - 2).includes("£"));
+}
 const RATING_ONLY = /^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[★*xX%]?[^A-Za-z0-9£]*$/;
 // Card text: once numbers (with OCR's O/o/I/l), these words and lone letters are removed, a card-text
 // line holds only ASCII punctuation, spaces and a few symbols. Any other letter, in any script, means
@@ -147,7 +159,7 @@ function makeLines(text) {
     if (j < nonblank.length) out.push(line(nonblank[j]));
     return out;
   };
-  return { starts, no, line, nb, neighbours };
+  return { starts, no, line, nb, nonblank, neighbours };
 }
 
 function plausible(value, legs) {
@@ -301,6 +313,7 @@ export function parseOfferText(text) {
     if (!FARE_TRAIL_OK.test(text.slice(end, legOnLine ? legOnLine[3] : lineEnd))) continue;
     if (L.neighbours(n).some((x) => PILL_LABEL.test(x))) continue;
     if (RIDER_PRICE.test(line) || L.neighbours(n).some((x) => RIDER_PRICE.test(x))) continue; // the rider's price
+    if (PROMO_CAPTION.test(line) || promoCaptioned(L, n)) continue; // a promo, reward or earnings amount
     rangeSeen = rangeSeen || !!rng;
     fares.push([m.index, L.nb[n], value, ACCEPT.test(line)]);
   }
@@ -357,26 +370,151 @@ export function parseOfferText(text) {
   return o;
 }
 
-// ---- Second signal for screenshots (attempt 2): text height. On a real offer card the fare is by far the
-// tallest text on screen; pills, notifications and captions are small. Pure function, no DOM.
-// lines: [{text, height}] from the OCR (height = bbox y1 - y0, any scale). Returns the fare or null.
-// The fare is the £ amount on the tallest line that holds a money-shaped amount, only if:
-//   - that line is at least GEO_MEDIAN_RATIO (1.5) times the median height of all text lines, and
-//   - it is at least GEO_MARGIN (1.25) times as tall as every other money-shaped line (25% margin), and
-//   - it holds exactly one distinct £ amount (not a rate "£1.10/mi", not an add-on "+£2.00").
-// A money-shaped line without a £ (a misread "E14.20", a rating "4.92") can be the tallest: then null.
-export const GEO_MEDIAN_RATIO = 1.5, GEO_MARGIN = 1.25;
+// ---- Screenshot clean-up before OCR (attempt 3). Pure function on RGBA pixels, no DOM, so Node can test it.
+// Makes black text on white: greyscale, dark mode flipped, one global cut-off (as before), EXCEPT inside
+// coloured regions (a fare drawn white on a green badge, black on yellow, white on blue). Tesseract loses
+// light-on-colour text after a global cut-off, so inside a coloured region a pixel is ink when its colour is
+// far from the region's own background colour (max-channel distance), whatever the polarity.
+// A coloured region: CELL x CELL cells with at least half their pixels saturated (max - min channel >= SAT_MIN),
+// joined 4-way, at least REGION_MIN_CELLS cells. In each pixel row of the region it spans from the first to
+// the last saturated pixel, so the text strokes inside the badge are included and the card around it is not.
+export const OCR_CUT = 140, SAT_MIN = 60, CELL = 6, REGION_MIN_CELLS = 12, INK_DIST = 90, EDGE = 3;
+// Solid dark (light-mode) or light (dark-mode) blocks: pixels past BLOCK_CUT, at least BLOCK_MIN_W x BLOCK_MIN_H
+// cells, with at least 60% of their cell rows spanning 80% of the block's width (a button or chip, not a glyph).
+export const BLOCK_CUT = 70, BLOCK_MIN_W = 10, BLOCK_MIN_H = 4;
+export function cleanPixels(a, w, h) {
+  const n = w * h;
+  const grey = new Float32Array(n);
+  const sat = new Uint8Array(n);
+  let sum = 0;
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    const r = a[p], g = a[p + 1], b = a[p + 2];
+    grey[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    sum += grey[i];
+    sat[i] = Math.max(r, g, b) - Math.min(r, g, b) >= SAT_MIN ? 1 : 0;
+  }
+  const dark = n > 0 && sum / n < 128;
+  // Solid blocks in the opposite shade (a black button or chip in light mode, a white one in dark mode).
+  const solid = new Uint8Array(n);
+  for (let i = 0; i < n; i++) solid[i] = !sat[i] && (dark ? grey[i] > 255 - BLOCK_CUT : grey[i] < BLOCK_CUT) ? 1 : 0;
+  const cw = Math.ceil(w / CELL), ch = Math.ceil(h / CELL);
+  const region = new Int32Array(n).fill(-1); // region id per pixel; -2 = a region's rim (background)
+  const bgs = [];
+  const seen = new Uint8Array(cw * ch);
+  // fill: the region's own pixels; share: how many of a cell's pixels must be fill pixels;
+  // blockShape: also require a button-like shape (wide, tall, mostly solid rows), so a big bold glyph never counts.
+  const addRegions = (fill, share, blockShape) => {
+    const cell = new Uint8Array(cw * ch);
+    for (let cy = 0; cy < ch; cy++) for (let cx = 0; cx < cw; cx++) {
+      let s = 0, t = 0;
+      for (let y = cy * CELL; y < Math.min(h, cy * CELL + CELL); y++)
+        for (let x = cx * CELL; x < Math.min(w, cx * CELL + CELL); x++) { s += fill[y * w + x]; t++; }
+      cell[cy * cw + cx] = s >= share * t ? 1 : 0;
+    }
+    seen.fill(0);
+    for (let start = 0; start < cw * ch; start++) {
+      if (!cell[start] || seen[start]) continue;
+      const cells = [], stack = [start];
+      seen[start] = 1;
+      while (stack.length) {
+        const c = stack.pop(); cells.push(c);
+        const cx = c % cw, cy = (c - cx) / cw;
+        for (const [nx, ny] of [[cx - 1, cy], [cx + 1, cy], [cx, cy - 1], [cx, cy + 1]]) {
+          if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
+          const k = ny * cw + nx;
+          if (cell[k] && !seen[k]) { seen[k] = 1; stack.push(k); }
+        }
+      }
+      if (cells.length < REGION_MIN_CELLS) continue;
+      const rows = new Map(); // cell row -> [first, last] cell column
+      for (const c of cells) {
+        const cx = c % cw, cy = (c - cx) / cw;
+        const r = rows.get(cy);
+        if (!r) rows.set(cy, [cx, cx]); else { r[0] = Math.min(r[0], cx); r[1] = Math.max(r[1], cx); }
+      }
+      let gx0 = cw, gx1 = 0;
+      for (const [x0, x1] of rows.values()) { gx0 = Math.min(gx0, x0); gx1 = Math.max(gx1, x1); }
+      if (blockShape) {
+        const width = gx1 - gx0 + 1;
+        const wide = [...rows.values()].filter(([x0, x1]) => x1 - x0 + 1 >= 0.8 * width).length;
+        if (width < BLOCK_MIN_W || rows.size < BLOCK_MIN_H || wide < 0.6 * rows.size) continue;
+      }
+      const id = bgs.length;
+      let br = 0, bg = 0, bb = 0, cnt = 0;
+      for (const cy of rows.keys()) {
+        for (let y = cy * CELL; y < Math.min(h, cy * CELL + CELL); y++) {
+          // In each pixel row, only from the first to the last fill pixel (the component's whole column
+          // range, so rounded corners are included): the badge or button itself.
+          let lo = -1, hi = -1;
+          for (let x = gx0 * CELL; x < Math.min(w, gx1 * CELL + CELL); x++) if (fill[y * w + x]) { if (lo < 0) lo = x; hi = x; }
+          for (let x = lo; lo >= 0 && x <= hi; x++) {
+            const i = y * w + x;
+            if (region[i] !== -1) continue; // already in a region
+            // The run's ends (EDGE px) are the anti-aliased rim: always background, never ink.
+            region[i] = x - lo < EDGE || hi - x < EDGE ? -2 : id;
+            if (fill[i]) { br += a[4 * i]; bg += a[4 * i + 1]; bb += a[4 * i + 2]; cnt++; }
+          }
+        }
+      }
+      bgs.push(cnt ? [br / cnt, bg / cnt, bb / cnt] : [255, 255, 255]);
+    }
+  };
+  addRegions(sat, 0.5, false);
+  addRegions(solid, 0.9, true);
+  // The regions' top and bottom rims (EDGE px, counted down and up each column) are background too.
+  for (let x = 0; x < w; x++) {
+    for (let y = 0, run = 0; y < h; y++) {
+      const i = y * w + x;
+      run = region[i] === -1 ? 0 : run + 1;
+      if (run > 0 && run <= EDGE) region[i] = -2;
+    }
+    for (let y = h - 1, run = 0; y >= 0; y--) {
+      const i = y * w + x;
+      run = region[i] === -1 ? 0 : run + 1;
+      if (run > 0 && run <= EDGE) region[i] = -2;
+    }
+  }
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    let v;
+    if (region[i] === -2) {
+      v = 255;
+    } else if (region[i] >= 0) {
+      const [br, bg, bb] = bgs[region[i]];
+      const d = Math.max(Math.abs(a[p] - br), Math.abs(a[p + 1] - bg), Math.abs(a[p + 2] - bb));
+      v = d > INK_DIST ? 0 : 255;
+    } else {
+      const g = dark ? 255 - grey[i] : grey[i];
+      v = g < OCR_CUT ? 0 : 255;
+    }
+    a[p] = a[p + 1] = a[p + 2] = v;
+  }
+  return { dark, regions: bgs.length };
+}
+
+// ---- Second signal for screenshots: text height (attempt 2; attempt 3 measures word boxes, not line boxes).
+// On a real offer card the fare is by far the tallest text on screen; pills, notifications and captions are small.
+// Pure function, no DOM. words: [{text, height, prev}] from the OCR, height = the word's bbox y1 - y0 (any scale),
+// prev = the word before it on the same line ("" if none). Returns the fare or null.
+// A money word is a word with a £ amount or a money-shaped number (1-3 digits, point, 2 digits: "E14.20", "4.92").
+// The fare is the £ amount of the tallest money word, only if:
+//   - it is at least GEO_MEDIAN_RATIO (1.5) times the median height of all words, and
+//   - it is at least GEO_MARGIN (1.15) times as tall as every other money word, and
+//   - it holds one £ amount (or is a bare amount right after a lone "£" word), not a rate or an add-on.
+// Measured (scan.md, attempt 3): Tesseract word boxes are proportional to font size (about 1.43 px per px of
+// font) and same-size amounts measure within 1 px of each other; a "/" adds about 5%. A 15% margin covers that
+// noise and refuses only when another amount is drawn within about 13% of the fare's size.
+export const GEO_MEDIAN_RATIO = 1.5, GEO_MARGIN = 1.15;
 const MONEY_SHAPED = /(?:^|[^0-9A-Za-z.,])[0-9OoIl]{1,3}[.,][0-9OoIl]{2}(?![0-9])/;
-export function fareFromLines(lines) {
-  if (!Array.isArray(lines)) return null;
+export function fareFromWords(words) {
+  if (!Array.isArray(words)) return null;
   const rows = [];
-  for (const l of lines) {
-    const text = unicodeDigits(String((l && l.text) || "")).replace(/[\r\n]+/g, " ");
-    const h = Number(l && l.height);
-    if (text.trim() && Number.isFinite(h) && h > 0) rows.push({ text, h });
+  for (const w of words) {
+    const text = unicodeDigits(String((w && w.text) || "")).trim();
+    const h = Number(w && w.height);
+    if (text && Number.isFinite(h) && h > 0) rows.push({ text, h, prev: unicodeDigits(String((w && w.prev) || "")).trim() });
   }
   if (rows.length < 3) return null;
-  const hs = rows.map((r) => r.h).sort((a, b) => a - b);
+  const hs = rows.map((r) => r.h).sort((x, y) => x - y);
   const k = hs.length >> 1;
   const median = hs.length % 2 ? hs[k] : (hs[k - 1] + hs[k]) / 2;
   const money = rows.filter((r) => MONEY_SHAPED.test(r.text) || new RegExp(FARE_SRC).test(r.text));
@@ -385,26 +523,39 @@ export function fareFromLines(lines) {
   for (const r of money) if (r.h > top.h) top = r;
   if (top.h < GEO_MEDIAN_RATIO * median) return null;
   if (money.some((r) => r !== top && r.h * GEO_MARGIN > top.h)) return null;
+  const text = top.prev === "£" && !top.text.includes("£") ? "£" + top.text : top.text;
   const values = new Set();
   const re = new RegExp(FARE_SRC, "g");
   let m;
-  while ((m = re.exec(top.text))) {
+  while ((m = re.exec(text))) {
     if (!hasDigit(m[1])) continue;
-    const end = m.index + m[0].length;
-    if (matchAt(RATE_AFTER, top.text, end)) continue; // "£1.10/mi"
-    if (top.text.slice(0, m.index).trimEnd().endsWith("+")) continue; // "+£2.00" add-on
+    if (matchAt(RATE_AFTER, text, m.index + m[0].length)) continue; // "£1.10/mi"
+    if (text.slice(0, m.index).trimEnd().endsWith("+")) continue; // "+£2.00" add-on
     values.add(f(ocrDigits(m[1])));
   }
   return values.size === 1 ? [...values][0] : null;
 }
 
-// Screenshot scans: the text rules' fare and the height fare must agree, or the fare goes to manual entry.
-// geoFare undefined means no geometry (pasted text): the text rules alone decide.
-export function reconcileScanFare(offer, geoFare) {
+// Attempt 3: on a screenshot a fare stands only if the card shows a ride label (variants included) above the
+// first leg, or an Accept line on or below it. Without either, the amount may not belong to an offer card.
+export function cardMarkerFound(text) {
+  const lines = unicodeDigits(String(text || "")).split("\n");
+  const legRe = new RegExp(LEG_SRC, "i");
+  const first = lines.findIndex((l) => legRe.test(l) && !NOT_LEG.test(l));
+  if (first < 0) return false;
+  return lines.slice(0, first).some(productLabelLine) || lines.slice(first).some((l) => ACCEPT.test(l));
+}
+
+// Screenshot scans: the text rules' fare and the height fare must agree, and the card must show a label or an
+// Accept line, or the fare goes to manual entry. geoFare undefined means no geometry (pasted text): the text
+// rules alone decide. text: the OCR text the offer was parsed from (for the label/Accept check).
+export function reconcileScanFare(offer, geoFare, text) {
   if (geoFare === undefined) return offer;
   const o = { ...offer, warnings: [...offer.warnings] };
-  if (o.fare === null || geoFare === null || Math.abs(o.fare - geoFare) > 0.005) {
-    if (o.fare !== null || geoFare !== null) o.warnings.push("fare_height_disagrees");
+  const marker = cardMarkerFound(text);
+  if (o.fare === null || geoFare === null || Math.abs(o.fare - geoFare) > 0.005 || !marker) {
+    if (o.fare !== null && !marker) o.warnings.push("fare_no_card_marker");
+    else if (o.fare !== null || geoFare !== null) o.warnings.push("fare_height_disagrees");
     o.fare = null;
     o.missing = REQUIRED.filter((x) => o[x] === null);
     if (!o.warnings.includes("needs_manual_entry")) o.warnings.push("needs_manual_entry");

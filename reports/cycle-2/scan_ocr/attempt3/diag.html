@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>diag</title>
+<script src="app/vendor/tesseract/tesseract.min.js"></script>
+<script type="module">
+import { cleanPixels } from "./app/js/engine.js";
+const base = new URL("app/vendor/tesseract/", location.href).href;
+let worker = null;
+window.diag = async (dataUrl, clean) => {
+  worker ??= await Tesseract.createWorker("eng", 1, { workerPath: base + "fairfare-worker.js", corePath: base, langPath: base + "lang", workerBlobURL: false });
+  const img = new Image(); img.src = dataUrl; await img.decode();
+  const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0);
+  const id = x.getImageData(0, 0, c.width, c.height);
+  if (clean) cleanPixels(id.data, c.width, c.height);
+  x.putImageData(id, 0, 0);
+  await worker.setParameters({ tessedit_pageseg_mode: "11" });
+  const d = (await worker.recognize(c, {}, { text: true, blocks: true })).data;
+  return { text: d.text, words: (d.words || []).map((w) => [w.text, w.bbox.y1 - w.bbox.y0]) };
+};
+window.ready = true;
+</script>

@@ -15,7 +15,7 @@
     "cases": []
   },
   "synthetic": {
-    "n_cases": 140,
+    "n_cases": 156,
     "scan_accuracy": {
       "fare": 1.0,
       "pickup_min": 1.0,
@@ -24,14 +24,14 @@
       "trip_miles": 1.0
     },
     "scan_accuracy_overall": 1.0,
-    "manual_fallback_rate": 0.3214,
+    "manual_fallback_rate": 0.3397,
     "verdict_n_scored": 51,
     "verdict_median_error": 0.0819,
     "verdict_p90_error": 0.2214,
     "range_coverage": 0.9412,
     "wrong_number_count": 0,
     "false_accept_count": 0,
-    "readable_n": 95,
+    "readable_n": 103,
     "readable_manual_rate": 0.0,
     "cases": [
       {
@@ -1150,6 +1150,150 @@
         "missing": [],
         "wrong_fields": [],
         "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-fz3-001",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-002",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-003",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-fz3-004",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-005",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-fz3-006",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-fz3-007",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-fz3-008",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-fz3-009",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-010",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-011",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-012",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-013",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-fz3-014",
+        "decision": "UNKNOWN",
+        "confidence": "low",
+        "missing": [
+          "fare"
+        ],
+        "wrong_fields": [],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-fz3-015",
+        "decision": "MARGINAL",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-fz3-016",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
       },
       {
         "id": "syn-fs-001",

@@ -1,4 +1,4 @@
-import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromLines, reconcileScanFare } from "./engine.js";
+import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromWords, reconcileScanFare, cleanPixels } from "./engine.js";
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
 import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd } from "./demand.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
@@ -75,9 +75,9 @@ let verdictSig = "";
 let offerGen = 0, verdictGen = -1;
 // Scan state shown in the verdict card: null, "reading" or "failed". scanSeq drops stale OCR results.
 let scanState = null, scanSeq = 0;
-// Text heights from the last screenshot's OCR, for the text that pass produced. The height check only
+// Word heights from the last screenshot's OCR, for the text that pass produced. The height check only
 // applies while lastText is still exactly that text (editing the box makes it pasted text again).
-let scanGeo = null; // { text, lines: [{ text, height }] }
+let scanGeo = null; // { text, words: [{ text, height, prev }] }
 const MAX_TEXT = 5000; // cap pasted or OCR text before parsing (huge pastes froze the page)
 const cancelScan = () => { scanSeq++; scanState = null; scanGeo = null; };
 
@@ -197,7 +197,7 @@ function updateCheck() {
   } else {
     o = parseOfferText(lastText);
     // Screenshot: the fare must also be the tallest amount on screen, or it goes to manual entry.
-    if (scanGeo && scanGeo.text === lastText) o = reconcileScanFare(o, fareFromLines(scanGeo.lines));
+    if (scanGeo && scanGeo.text === lastText) o = reconcileScanFare(o, fareFromWords(scanGeo.words), lastText);
     // What was read from the card has numbers in it, so it lives inside Details too (SAFETY.md).
     readout = lastText.trim() ? `<p class="readout">${esc(t("check.read"))}: ` + Object.keys(FIELD).map((k) =>
       o[k] === null ? `<span class="miss">${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))}: ${esc(t("check.notFound"))}</span>`
@@ -293,19 +293,8 @@ function prepareForOcr(bmp, scale) {
   const x = c.getContext("2d", { willReadFrequently: true });
   x.drawImage(bmp, 0, 0, c.width, c.height);
   const img = x.getImageData(0, 0, c.width, c.height);
-  const a = img.data;
-  let sum = 0;
-  for (let i = 0; i < a.length; i += 4) {
-    const g = 0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2];
-    a[i] = g; sum += g;
-  }
-  const dark = sum / (a.length / 4) < 128;
-  for (let i = 0; i < a.length; i += 4) {
-    let g = a[i];
-    if (dark) g = 255 - g;
-    g = g < 140 ? 0 : 255;
-    a[i] = a[i + 1] = a[i + 2] = g;
-  }
+  // Greyscale, dark mode flipped, black and white; coloured badges read by colour distance (engine.js cleanPixels).
+  cleanPixels(img.data, c.width, c.height);
   x.putImageData(img, 0, 0);
   return c;
 }
@@ -318,11 +307,11 @@ async function scanImage(file) {
   offerGen++;
   lastText = "";
   scanGeo = null;
-  const finish = (state, text = "", lines = null) => {
+  const finish = (state, text = "", words = null) => {
     if (my !== scanSeq) return; // a newer scan (or typed input) has taken over
     scanState = state;
     lastText = text;
-    scanGeo = lines ? { text, lines } : null;
+    scanGeo = words ? { text, words } : null;
     if (!$("#verdict")) return; // Check screen not open: renderCheck shows this state when it is
     $("#ocr").value = text;
     $("#scan-status").textContent = state === "failed" ? t("check.scanFailed") : "";
@@ -336,11 +325,13 @@ async function scanImage(file) {
     const worker = await getOcrWorker();
     const bmp = await createImageBitmap(file);
     // Pass 1: full size, cleaned to black-on-white, read as scattered text (an offer card isn't prose).
-    // Each pass keeps its text and its line heights (bbox y1 - y0) for the fare height check.
+    // Each pass keeps its text and its word heights (bbox y1 - y0) for the fare height check.
     const read = async (scale) => {
       const d = (await worker.recognize(prepareForOcr(bmp, scale), {}, { text: true, blocks: true })).data || {};
-      const lines = (d.lines || []).map((l) => ({ text: l.text || "", height: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0 }));
-      return { text: (d.text || "").slice(0, MAX_TEXT), lines };
+      const words = [];
+      for (const l of d.lines || []) (l.words || []).forEach((w, i) => words.push({
+        text: w.text || "", height: w.bbox ? w.bbox.y1 - w.bbox.y0 : 0, prev: i ? l.words[i - 1].text || "" : "" }));
+      return { text: (d.text || "").slice(0, MAX_TEXT), words };
     };
     await worker.setParameters({ tessedit_pageseg_mode: "11" });
     let pass = await read(1);
@@ -352,7 +343,7 @@ async function scanImage(file) {
     }
     if (bmp.close) bmp.close();
     if (parseOfferText(pass.text).missing.length === 5) finish("failed");
-    else finish(null, pass.text, pass.lines);
+    else finish(null, pass.text, pass.words);
   } catch {
     finish("failed");
   } finally {

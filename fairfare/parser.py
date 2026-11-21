@@ -133,6 +133,10 @@ _GLUED_LABEL = re.compile(r"^[^A-Za-z0-9]*uber[ \t-]*xl?[ \t]?[A-Za-z]?[ \t]?[0-
 _ZONE_MAX_LINES = 3
 # A rider-price caption: the amount on the line, or next to it, is what the rider pays.
 _RIDER_PRICE = re.compile(r"\b(?:riders?|customer pays|you paid|total paid)\b", re.I | re.ASCII)
+# Attempt 3: a promo/reward caption on the amount's line or the next/previous non-blank line means the
+# amount is a promo, reward or earnings figure. A surge/boost "included" line (_SURGE) is card text, not a caption.
+_PROMO_CAPTION = re.compile(r"\b(?:bonus|promo|reward|rewards|streak|quest|extra|earn|earns|earned|earning|earnings|boost)\b",
+                            re.I | re.ASCII)
 _RATING_ONLY = re.compile(r"^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[★*xX%]?[^A-Za-z0-9£]*$", re.ASCII)
 # Card text: once numbers (with OCR's O/o/I/l), the words below (product names, units, leg labels,
 # the Accept button, surge/boost lines, rate lines) and lone letters ("4.89 x", "E11.10") are
@@ -207,6 +211,21 @@ def _product_label_line(line: str) -> bool:
     if _GLUED_LABEL.match(line):
         return True
     return bool(_PRODUCT_WORD.search(_PRODUCT_BADGES.sub(" ", line))) and bool(_PRODUCT_LABEL.match(line))
+
+
+def _caption(line: str) -> bool:
+    """A promo/reward caption line: a promo word, no £ amount of its own, not a surge/boost-included line."""
+    return bool(_PROMO_CAPTION.search(line)) and "£" not in line and not _SURGE.search(line)
+
+
+def _promo_captioned(lines: "_Lines", n: int) -> bool:
+    """The amount on line n has a promo caption just below it, or just above it (unless that caption
+    already sits directly under another £ amount, which it then belongs to)."""
+    k = lines.nb[n]  # index of line n among the non-blank lines
+    nb = lambda j: lines.line(lines.nonblank[j])  # noqa: E731
+    if k + 1 < len(lines.nonblank) and _caption(nb(k + 1)):
+        return True
+    return k >= 1 and _caption(nb(k - 1)) and not (k >= 2 and "£" in nb(k - 2))
 
 
 def _window_counted(line: str) -> bool:
@@ -397,6 +416,8 @@ def parse_offer_text(text: str) -> Offer:
             continue
         if _RIDER_PRICE.search(line) or any(_RIDER_PRICE.search(nb) for nb in lines.neighbours(n)):
             continue  # the rider's price, not the driver's fare
+        if _PROMO_CAPTION.search(line) or _promo_captioned(lines, n):
+            continue  # a promo, reward or earnings amount
         range_seen = range_seen or bool(rng)
         fares.append((m.start(), lines.nb[n], value, bool(_ACCEPT.search(line))))
 

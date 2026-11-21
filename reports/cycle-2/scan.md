@@ -221,3 +221,124 @@ The before-eval was saved first: `reports/cycle-2/eval_attempt2_before.json` (at
 4. **The label variants and the 3-line window** are guesses. A real card with more than 3 counted lines between the label and the pickup (rider name, address, notes) would be refused. That is safe, but it may raise the manual-entry rate on real screenshots.
 5. **Rider-price words** are English only.
 6. All figures are synthetic. Real, redacted screenshots are still the step that matters (human gate).
+
+---
+
+# Attempt 3 (after QA's "Attempt 2 re-test")
+
+**Everything here is synthetic: invented text, and cards I drew. None of it is a real Uber screenshot.** I read qa.md for the mechanisms only. No case in `reports/cycle-2/qa_probes/` was opened or used. All cards and cases below are my own.
+
+## 1. Root cause fixed: OCR now reads text on coloured badges and buttons (engine.js `cleanPixels`, used by app.js `prepareForOcr`)
+The clean-up is a pure function on RGBA pixels, so Node can test it.
+- **Outside coloured regions it works as before:** greyscale, dark mode flipped, one cut-off at 140.
+- **Coloured regions** are cells of 6×6 px where at least half the pixels are saturated (max − min channel ≥ 60). They are joined 4-way and need at least 12 cells.
+- **Solid blocks** are a black button or chip in light mode, or a white one in dark mode: cells at least 90% past a cut-off of 70. A block must look like a button:
+  - at least 10 × 4 cells;
+  - at least 60% of its cell rows must span 80% of its width.
+
+  A big bold glyph never meets that.
+- **Inside a region or block, polarity doesn't matter.** Ink is any pixel whose max-channel distance from the region's own background colour is more than 90. White on green, white on blue, black on yellow, and white on a black button all come out as black text on white.
+- **The anti-aliased rim** (3 px at each end of a row run, and 3 px at the top and bottom of each column run) is background. Without that, rim specks made Tesseract's word box 60% too tall.
+- **Images without colour or solid blocks are unchanged**, pixel for pixel. The two OCR passes and their selection are unchanged.
+- **Measured on my own cards with the app's Tesseract pass 1** (`scan_ocr/attempt3/diag.js`, `diag.json`): fare read correctly on **every badge card, light and dark**. Green: c03, c06, c07, c13 and c15. Blue: c04. Yellow: c05. Before this change OCR lost 8 of 8 badge fares (attempt 2).
+- The "Accept" button and a dark label chip, both white on black, were never in the OCR text before. They are now read on all 34 scans that have them.
+
+## 2. Screenshot rule: label or Accept (engine.js `cardMarkerFound`, used in `reconcileScanFare`)
+- A scanned fare stands only if the OCR text has one of two markers:
+  - a ride label (variants included) above the first leg, or
+  - an Accept line on or below it.
+- Otherwise the fare is None (`fare_no_card_marker`).
+- This applies to screenshots only. Pasted text keeps the text rules.
+
+## 3. Promo captions (parser.py and engine.js, identical)
+- An amount is rejected if any of these hold:
+  - its own line has bonus, promo, reward(s), streak, quest, extra, earn/earns/earned/earning(s) or boost;
+  - the next non-blank line is a caption;
+  - the previous non-blank line is a caption, unless that caption sits directly under another £ amount (then it belongs to that one).
+- **A caption** is a line with one of those words, no £ amount of its own, and not a surge/boost "included" line (`_SURGE`).
+- **Why the "no £ of its own" condition:** without it, an existing case (syn-fs-009, "Quest: 5 more trips for £15.00 bonus" above the fare) lost its fare. That line is a self-contained promo, not a caption for the next amount.
+- **Why the "belongs to the amount above" condition:** "£62.10 / Earned so far / £10.70" reads the £10.70 fare (syn-fz3-016).
+
+## 4. Height check on word boxes (engine.js `fareFromWords`; app.js now passes `data.lines[].words` with height and previous word)
+- **What I measured** (28 scans of 14 cards, light and dark, `diag.json`):
+  - Tesseract **word** boxes are proportional to font size. A 34 px fare gives 49 px, 30 px gives 43, 28 px gives 40, 22 px gives 32, 15–17 px body text gives 21–25, and 40 px gives 54. That is about 1.43 px of box per px of font.
+  - Same-size amounts measure within 1 px of each other (49 against 49). A "/" adds about 5% ("£1.14/mi" 22 against 21).
+  - Line boxes, used in attempt 2, were not proportional. That was QA's finding.
+- **The rule:**
+  - The tallest money word must hold the fare's £ amount.
+  - It must be at least **1.5× the median word height** (unchanged).
+  - It must be at least **1.15× every other money word**. The 15% margin covers about 5% measurement noise with room to spare, so the check refuses only when another amount is drawn within about 13% of the fare's size. Attempt 2 refused at about 80%.
+  - A lone "£" word followed by "12.40" counts as £12.40.
+- **On my cards:**
+  - A plain fare is 1.6–1.96× the median word.
+  - A pill at 22 px against a 34 px fare is 0.65×, and passes.
+  - A pill drawn as large as the fare, or larger, still refuses. That is safe and deliberate.
+
+## Numbers
+**Text level** (`eval_set/synthetic_fare_zone_3.jsonl`, 16 new cases of my own: promo, reward, streak, quest and earn captions above or below, surge/boost-included lines, an Accept-line repeat, a bonus after Accept, a no-label cropped card). The before-eval was saved first: `reports/cycle-2/eval_attempt3_before.json`.
+
+| metric (synthetic, 156 cases) | attempt-2 rules | attempt-3 rules |
+|---|---|---|
+| **wrong_number_count** (gated) | 5 | **0** |
+| false_accept_count | 4 | 0 |
+| readable_manual_rate (n = 103) | 0.0 | 0.0 |
+| scan_accuracy_overall | 0.9936 | 1.0 |
+
+- `pytest -q`: 90 passed. That includes parity on all 6 eval files and 29 adversarial texts, plus the Node tests: `fareFromWords` (13 cases), label/Accept and reconcile, and `cleanPixels` on 9 synthetic pixel images.
+- Python vs JS on 3000 fuzzed texts: 0 differences.
+- `--baseline reports/eval_baseline.json` and `--baseline reports/cycle-2/eval_before.json`: no regression. The 92 earlier rows are unchanged.
+- `tools/gate.py 2` reads the goal as met.
+
+**Real OCR through the app:**
+- **Setup:**
+  - `python3 -m http.server 8778` from app/, stopped afterwards.
+  - Playwright, 390×844 at 2×, `#scan-file`, 17 cards × light and dark = 34 scans.
+  - 0 requests left the origin, and the page logged 0 errors.
+  - Scan time 265–830 ms.
+  - Files are in `reports/cycle-2/scan_ocr/attempt3/` (`cards.js`, `draw.js`, `run.js`, `an.mjs`, `result.json`).
+- **Verdicts** use the app's default settings. "Truth verdict" is the verdict on the true fare; CAN'T TELL where the card shows no fare.
+
+| card | fare read (light / dark) | app verdict (light / dark) | truth verdict |
+|---|---|---|---|
+| c01 plain, fare 34 px | 12.40 / 12.40 | MARGINAL / MARGINAL | MARGINAL |
+| c02 small fare (28 px on 16 px body) | 11.80 / 11.80 | ACCEPT / ACCEPT | ACCEPT |
+| c03 fare white on green | 14.20 / 14.20 | MARGINAL / MARGINAL | MARGINAL |
+| c04 "Uber Comfort", fare white on blue | 15.60 / 15.60 | ACCEPT / ACCEPT | ACCEPT |
+| c05 fare black on yellow | 9.80 / 9.80 | ACCEPT / ACCEPT | ACCEPT |
+| c09 rider price "£16.00 / Rider pays" under the fare | 10.40 / 10.40 | MARGINAL / MARGINAL | MARGINAL |
+| c10 label on a dark chip | 11.40 / 11.40 | ACCEPT / ACCEPT | ACCEPT |
+| c11 rate line "£1.14/mi · £0.62/min" | 14.20 / 14.20 | MARGINAL / MARGINAL | MARGINAL |
+| c12 "+£2.20 surge included" | 13.75 / 13.75 | ACCEPT / ACCEPT | ACCEPT |
+| c13 green badge fare, smaller pill "£71.90" above | 16.40 / 16.40 | MARGINAL / MARGINAL | MARGINAL |
+| c14 tip "£2.00" after Accept | 12.80 / 12.80 | ACCEPT / ACCEPT | ACCEPT |
+| c06 green badge fare, pill "£58.40" drawn **as big as** the fare | None / None | CAN'T TELL | MARGINAL (refused by the height margin) |
+| c07 green badge fare, "£30.00 / Streak reward" drawn **bigger** | None / None | CAN'T TELL | ACCEPT (the height check refuses) |
+| c15 green badge fare, "£45.00 / 3 trips to go" drawn bigger, in the zone | None / None | CAN'T TELL | ACCEPT (two amounts in the zone) |
+| c16 pill "£64.00" above the label, drawn bigger than the fare | None / None | CAN'T TELL | ACCEPT (the height check refuses) |
+| c08 no label and no Accept line | None / None | CAN'T TELL | ACCEPT (the label-or-Accept rule refuses) |
+| **c17 residual-risk probe:** fare **not drawn**, "£45.00 / 3 trips to go" at 40 px between the label and the legs | **45.00 / 45.00** | **ACCEPT / ACCEPT** | CAN'T TELL → **false ACCEPT** |
+
+**Summary of the 34 scans:**
+- **Wrong fares: 0 on the 32 scans of cards that show their fare.** That includes every badge card.
+- **Manual entry on the 11 normal cards (c01–c05, c09–c14): 0 of 22 scans (0%).** Target ≤ 25%.
+- **Manual entry on all 16 cards that show a fare: 10 of 32 (31%).** All 10 are the 5 hostile cards (c06, c07, c08, c15, c16). Each is refused by a rule on purpose, because a stray amount is as big as the fare or bigger, or there is no label and no Accept line.
+- **c17 (2 scans) is the one false ACCEPT.** It is a deliberate probe of the remaining hole.
+
+## The remaining hole (why c17 still fails), stated plainly
+- **What it takes:**
+  - the card's fare is missing from the OCR text;
+  - **and** a stray amount drawn bigger than everything else sits between the label and the legs;
+  - **and** its caption has none of the promo words.
+- **Why nothing catches it:** in text, "UberX / £45.00 / 3 trips to go / legs" looks exactly like a real card with a rider note. The height signal agrees, because the stray amount is the tallest text.
+- **What changed this attempt:** the way OCR lost the fare in QA's real scans (white on a coloured badge) is fixed on every badge I drew. So this now needs the fare to be lost some other way, or never shown.
+- **Ways to close it, all guesses:**
+  - a tighter fare-per-mile cap (£45 for 8.8 mi passes today's generous £20 + £6/mi + £1/min bound);
+  - refusing any zone amount followed by an ordinary-words line. That would also refuse cards with a rider name under the fare.
+- **I recommend not guessing further without real screenshots.** That is a call for the Orchestrator and the owner.
+
+## Assumptions about real layouts added in this attempt
+1. A real fare badge or Accept button is a solid coloured (or black or white) shape with text in one contrasting colour. Gradients, photos or transparent badges are not handled.
+2. On a real card the fare is drawn at least about 15% bigger than any other amount on screen, and 1.5× the median word. If a real earnings pill is as big as the fare, the card is refused (safe, but manual entry).
+3. A real card shows a ride label or an Accept line that OCR can read.
+4. Promo captions are in English and use the listed words.
+5. All figures are synthetic, including my real-OCR drawings. Real, redacted screenshots remain the step that matters.
