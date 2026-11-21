@@ -16,3 +16,12 @@ _Owned by the Orchestrator. Append only. Each entry has the date, the decision, 
 - Rule applied: /cycle stops after 3 failed attempts and asks the human. Work stays on branch cycle-1; nothing merged to main or shipped.
 - Lesson: hand-written rules tuned on invented cards keep meeting new invented cards. The next step that matters is 10-20 real, redacted Uber offer screenshots.
 - Open human gates: 21 in reports/cycle-1/human_gates.md.
+
+## 2026-11-21 - Cycle 2: HOLD (all reviews PASS), waiting on the owner
+- Goal: wrong_number_count <= 0. Met on synthetic data (0 on 156 cases; false ACCEPTs 0). Synthetic only.
+- Scope: the screenshot reader only. Research and Growth skipped (no new owner input or question).
+- Built over 3 attempts: "fare zone" (fare read only between the ride label and the legs, the label line, or a below-legs Accept line); a size cross-check (a scanned fare must also be the tallest amount word on screen, margin 1.15, at least 1.5x median word height); a scanned fare needs a ride label or Accept line; promo-caption amounts rejected; colour-aware OCR passes so fares on coloured badges are read.
+- Reviews: QA PASS (conditional, attempt 3), Privacy PASS, Economics PASS, Ops PASS.
+- QA evidence: 0 wrong numbers and 0 false ACCEPTs across 158 real-OCR scans of realistic made-up cards; manual entry on readable cards 8% (text), 16-19% (real OCR), down from 47% at the end of cycle 1.
+- Gate: HOLD on 3 owner items in reports/cycle-2/human_gates.md: check the assumed card layout on 10+ real screenshots; accept or reject the remaining "fare missed + equally big amount in the card" risk (only triggered with a deliberately thin grey fare); accept or reject the pasted-text risk (or turn off pasting offer text).
+- Nothing merged to main or shipped to drivers. Work is on branch cycle-2 (contains cycle 1's work).

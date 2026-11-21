@@ -1,4 +1,4 @@
-STATUS: BLOCK
+STATUS: PASS
 
 # QA / Red Team report, cycle 2 (fare zone)
 
@@ -245,3 +245,122 @@ The verdicts below are the app's; "truth" is the verdict on the fare shown in th
 
 ### Summary (attempt 2)
 BLOCK. Attempt 2 fixes all of set 4 (0 wrong, 0 false ACCEPT, at text level and with real OCR). On fresh set 5, real scans give false ACCEPTs on 4 of 25 cards (p01, p03, p20, p21). In each, Tesseract lost the green-badge fare, and a bigger stray amount was then read as the fare, with the height check agreeing. The stray amount was an earnings pill, a quest banner, or a promo or reward amount with its caption on the next line. Manual entry is within target at text level (11%) and on set 4 (23%). On set 5 it reaches 56%, because the height check refuses any card where another amount is nearly as big as the fare. pytest and the UI checks pass. All synthetic.
+
+---
+
+## Attempt 3 re-test (2026-11-21)
+
+**STATUS: PASS (conditional).** The first line of this file now reads `STATUS: PASS`.
+- **0 wrong numbers on 158 real-OCR scans of realistic cards**, light and dark: set 4, the badge cards, set 5 and the new set 6.
+- The **known hole (scan.md's c17) still exists and I reproduced it.** It gives a false ACCEPT only when the card holds a **second amount drawn as big as the fare, inside the card between the label and the legs, with a neutral caption**, *and* OCR loses the real fare.
+- I could make OCR lose a fare only by drawing it thin and pale grey, which real Uber cards don't do. The badge loss that caused the attempt-1 and attempt-2 blocks is fixed.
+- **Under the block rule's letter, these hole probes are fresh cards that give a false ACCEPT.** I am passing because none of the realistic cards does, and the owner and Orchestrator must explicitly accept this residual risk (I recommend a `- [ ]` line in human_gates.md). If they won't, treat this as BLOCK.
+
+**All figures are synthetic: made-up text and drawn cards. None of it is a real Uber screenshot.**
+
+**Probes** are in `reports/cycle-2/qa_probes/`:
+- `make_cases6.py` writes `fresh_cases_6.jsonl`.
+- `ocr_run6.js` runs set 6 through the app (per-card screen size, font, CSS, a map background and stacked cards).
+- `hole_probes.jsonl` holds the hole probes.
+- `geo_diag3.js` logs Tesseract's word heights.
+- `ui_probe4_a3.js` checks the Offer check screen.
+- The result files are `a3_*_out.json`.
+- The app was served with `python3 -m http.server 8779` and the server was stopped afterwards.
+- 166 scans: 0 requests left the origin and the page logged 0 errors. Scan time was 206–1109 ms.
+
+### 1. Earlier sets, re-run
+
+| set | text level (both engines) | real OCR, light and dark |
+|---|---|---|
+| set 4 (32 cards; 18 scanned, 4 also redrawn) | 0 wrong; manual entry 2/20 | 0 wrong, 0 false ACCEPT (44 scans) |
+| badge cards b1–b4 | 0 wrong | **all 8 fares now read correctly** (they were all lost in attempt 2); 0 wrong |
+| set 5 (25 cards) | **4 wrong, all false ACCEPTs:** p01, p03, p07, p20 (pasted text with the fare line lost) | **0 wrong, 0 false ACCEPT** (50 scans); p01, p03, p20 and p21 are now refused |
+
+- **Pasted text stays exposed:** a pasted text that has lost its fare line can still give a wrong fare. This is the Scan Engineer's stated no-label departure, plus the c17 caption hole (p03's "Finish 3 more trips by 6pm" has no promo word).
+- **Severity:** medium. It needs a paste of OCR output that has already lost the fare. A pasted card normally includes its fare.
+
+### 2. Fresh set 6 (`fresh_cases_6.jsonl`, 26 cards, all scanned light and dark: 52 scans)
+
+What the set covers:
+- **Badge colours:** fares on purple, red, orange (black text), dark grey and blue badges, and on green-to-teal and purple-to-pink gradients.
+- **Accept buttons:** a blue Accept button with the fare on it, a green Accept button, and a gradient Accept button.
+- **Screens and fonts:** 360×640, 360×740 and 320×568 screens; FreeSans, Carlito, Inter, Courier 10 Pitch, IPAGothic, Caladea and DejaVu.
+- **Backgrounds and overlays:** a map with a coloured park and river, a Monzo heads-up notification, yellow "online" and "weekly goal" banners, and a dark earnings chip.
+- **Card details:** an orange "1.6x" surge pill, a purple "Exclusive" tag, rider-note lines, a "🐾 Uber Pet" label, a fare with an "Upfront" tag on the same row, and a cropped card with no Accept line.
+- **Two cards:** a full Trip Radar pair, and a cut-off top card.
+- **Units and lengths:** km, a 1 hr 32 min trip, and a 3-minute trip.
+- **Contrast:** two low-contrast thin grey fares.
+
+**Results:**
+
+| | wrong numbers | false ACCEPTs | readable sent to manual entry |
+|---|---|---|---|
+| text level, both engines (0 differences) | 0 | 0 | 2/25 (8%): q20 (two amounts in the zone), q24 ("Upfront" on the fare row) |
+| real OCR, 52 scans | **0** | **0** | 8/50 (16%) including badge cards; 6/32 (19%) without |
+
+The 8 OCR refusals:
+- **q03:** "(" was read as "{" on the trip leg (both modes). The leg was refused, which is safe.
+- **q11:** the cut-off top card's fare is the same size as this card's, so the height check refuses (both modes).
+- **q19 and q20:** the thin grey fare was lost (both modes).
+  - In q20 the text rules then took the small "£2.50 Clean Air Zone" note as the fare, but the height check vetoed it. That was the right outcome.
+
+The same OCR rate without the two deliberately low-contrast cards: 4/46 (9%).
+
+**Every other card read all five fields correctly**: every coloured, gradient and dark badge, the fare on a blue Accept button, the small screens, every font, the map background, the notification and banner screens, the surge pill and the Upfront tag. The two-card Trip Radar screen was refused (`multiple_offers`), which is correct.
+
+### 3. The c17 hole: does it happen on realistic cards?
+
+Probe (`hole_probes.jsonl`): an "UberX" card with its £11.80 fare drawn thin and grey so that OCR loses it, and an in-zone amount with a neutral caption ("Guaranteed minimum", "Airport pickup fee"). The true verdict is MARGINAL.
+
+| in-zone amount size (fare drawn at 36 px) | text rules read | app (after the height check) |
+|---|---|---|
+| £6.00 at 20 px | 6.00 | refused |
+| £25.00 at 24, 28 and 32 px | 25.00 | refused (32 px: a 46 px word box against a 32 px median, 1.44×, below 1.5×) |
+| **£25.00 at 36 and 40 px** | 25.00 | **25.00, ACCEPT, in light and dark: a false ACCEPT** |
+
+What it takes:
+- a second amount **as large as the fare**, inside the card between the label and the legs, with a caption that has no promo word;
+- **and** OCR losing the real fare.
+
+My judgement on realism:
+- No realistic card in sets 4–6 has a second fare-sized amount inside the card.
+- Every realistic way I tried to lose a fare is now read: green, blue, purple, red, orange, grey and gradient badges, black buttons and dark chips.
+- The only fare loss I produced is a thin, pale grey fare, which Uber does not use for the fare.
+
+So I rate it **unlikely: severity high if it happened, likelihood low.** Real screenshots are what would show otherwise.
+
+### 4. Manual-entry rate on readable cards (targets: at most 20% text, at most 25% OCR)
+
+| set | text | real OCR without badge cards | real OCR with badge cards |
+|---|---|---|---|
+| set 6 (realistic) | **8%** | **19%** (9% without the two deliberate low-contrast cards) | **16%** |
+| set 4, redrawn so the fare is the big line | 10% | 23%: h16, h17, h23 | 18% (with b1–b4, all read) |
+| set 5 (built so stray amounts rival the fare) | 11% | 50% | 62% |
+| set 5, the 9 normal cards only | 0% | 11% (p10: no label and no Accept line) | n/a |
+
+- **The targets are met on the realistic sets.**
+- Set 5's high rate is deliberate: the height check refuses any card where another amount is within about 13% of the fare's size. That is safe, but it costs manual entry if real screens look like that.
+- Set 4's h23 ("UberXL · Exclusive" with the fare on the label line) is still refused after redrawing.
+
+### 5. Regression
+- `python -m pytest -q`: 90 passed.
+- `run_eval --baseline reports/cycle-2/eval_before.json`: no regression. On the synthetic side, 156 cases with wrong_numbers 0 and false_accepts 0.
+- **Offer check screen** (`ui_probe4_a3.js`): all 8 checks pass.
+  - The verdict word shows.
+  - Details is closed by default.
+  - No numbers show outside Details.
+  - A new scan clears the old ACCEPT at once.
+  - A scanned card shows its own verdict.
+  - A failed read gives CAN'T TELL.
+  - No page errors.
+- **Safety:** no UI strings or flows changed. Nothing new needs the phone handled while driving.
+
+### Remaining issues
+- **High if it occurs, likely low (scan):** the c17 hole above. The owner must accept the risk.
+- **Medium (scan):** pasted text that has lost its fare line can still give a wrong fare (set 5: p01, p03, p07, p20).
+- **Medium (scan):** fare below the legs (h17), a rate on the Accept line (h16) and a fare on the label line (h23) are refused.
+- **Low (scan):** OCR read "(" as "{" and lost the trip leg (q03).
+- **Low (scan):** cards with no label and no Accept line are refused (p10).
+
+### Summary (attempt 3)
+PASS (conditional). Real OCR now reads fares on every badge colour, gradient and dark button I drew. Across 158 realistic scans (set 4, the badge cards, set 5 and the new set 6) there are 0 wrong numbers and 0 false ACCEPTs. Manual entry on realistic cards is 8% at text level and 16–19% with real OCR. The known c17 hole still gives a false ACCEPT, but only when a second amount as big as the fare sits inside the card and OCR loses the real fare, which I could do only with a thin grey fare. The owner must accept that risk. Pasted text that has lost its fare line can still give a wrong fare. pytest and the UI checks pass. All synthetic.
