@@ -25,3 +25,10 @@ _Owned by the Orchestrator. Append only. Each entry has the date, the decision, 
 - QA evidence: 0 wrong numbers and 0 false ACCEPTs across 158 real-OCR scans of realistic made-up cards; manual entry on readable cards 8% (text), 16-19% (real OCR), down from 47% at the end of cycle 1.
 - Gate: HOLD on 3 owner items in reports/cycle-2/human_gates.md: check the assumed card layout on 10+ real screenshots; accept or reject the remaining "fare missed + equally big amount in the card" risk (only triggered with a deliberately thin grey fare); accept or reject the pasted-text risk (or turn off pasting offer text).
 - Nothing merged to main or shipped to drivers. Work is on branch cycle-2 (contains cycle 1's work).
+
+## 2026-11-21 - Owner decisions on cycle 2
+- Layout check: owner has looked at real Uber screenshots and will send them (redacted). They become FairFare's first real (pilot) test cases.
+- Rare reader risk (fare missed + equally big amount in the card): NOT accepted by the owner. Cycle 2 stays blocked for release.
+- Pasted text risk: accepted; pasting offer text stays.
+- Go live: owner approved going live, but it cannot happen yet: the reader risk is not accepted, and GitHub shows Pages still off (latest Publish app run, 2026-11-20 19:14, "Get Pages site failed... Not Found") and no Ticketmaster key ("ticketmaster_no_key").
+- Next: cycle 3 tests and fixes the reader on the owner's real screenshots to close the risk; then release, once Pages is on.
