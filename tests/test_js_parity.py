@@ -82,6 +82,14 @@ ADVERSARIAL = [
     "UberX\n£39.00\n5 mins (1.5 mi) away\n1h20min (30.2 mi) trip",
     "UberX\n£39.00\n5 mins (1.5 mi) away\n1hr20 (30.2 mi) trip",
     "UberX\n£26.30\n5 mins (1.4 mi) away\nStop · 8 mins (2.9 mi)\n20 mins (7.7 mi) trip",
+    # Cycle 2 fare zone: non-Latin and emoji pills, badges, label variants, a second card cut off.
+    "£44.10\nمتصل الآن\nUberX\n4.9 ★\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip",
+    "£44.10\n🚗 on a roll\n4.9 ★\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip",
+    "£50.00\nGold\nUberX\n£12.10\nExclusive\n4.9 ★\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip",
+    "£50.00\nPro status\nUber X Share\n£12.10\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip",
+    "UberX\n£12.10\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip\n£25.40\nComfort",
+    "UberX\n£1O.80\n4.9l ★\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip\nAccept\n£3.00",
+    "£31.50\n14:21 4G 58%\n4.9 ★\n5 mins (1.6 mi) away\n17 mins (6.8 mi) trip",
 ]
 
 

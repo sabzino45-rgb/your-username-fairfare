@@ -81,6 +81,31 @@ const LEG_SRC = "(?:([0-9]+)[ \\t]*(?:hours?|hrs?|h)(?![A-Za-z])[ \\t]*(?:([0-9]
   NUM + "[ \\t]*(?:mins?|minutes?))" +
   "[ \\t]*[(\\[·•,-]?[ \\t]*" + NUM + "[ \\t]*(mi|miles?|km)\\b\\)?[ \\t]*(away|trip|pickup)?";
 const RATING = new RegExp(NUM + "\\s*[★*]");
+// Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
+// "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
+const PRODUCT_NAMES = "uber[ \\t]+x[ \\t]+share|uber[ \\t]+pet|comfort[ \\t]+electric|uberxl|uberx|xl|comfort|" +
+  "green|exec|executive|lux|black|pet|access|assist|wav|exclusive|priority|share|electric|taxi";
+// A product-label line: only names from that list, separators, and optionally the fare amount.
+const PRODUCT_LABEL = new RegExp(
+  "^(?:[^A-Za-z0-9£]|£[ \\t]?[0-9OoIl]+(?:[.,][0-9OoIl]{1,2})?|\\b(?:" + PRODUCT_NAMES + ")\\b)*$", "i");
+// The anchor needs a ride-type name: a line of badges only ("Exclusive", "Priority") can sit
+// below the fare, so it is card text but never the anchor.
+const PRODUCT_BADGES = /\b(?:exclusive|priority)\b/gi;
+const PRODUCT_WORD = new RegExp("\\b(?:" + PRODUCT_NAMES + ")\\b", "i");
+// Card text: once numbers (with OCR's O/o/I/l), these words and lone letters are removed, a card-text
+// line holds only ASCII punctuation, spaces and a few symbols. Any other letter, in any script, means
+// ordinary words (notification, pill, banner). A status-bar line (clock or battery %) isn't card text.
+const CARD_WORDS = new RegExp(
+  "\\b(?:" + PRODUCT_NAMES + "|uber|accept|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|" +
+  "surge|boost|includes?|included|incl|per)\\b", "gi");
+const LONE_LETTER = /\b[A-Za-z]\b/g;
+const OCR_NUMBER = /[0-9OoIl]*[0-9][0-9OoIl]*/g; // "4.9l", "£1O.80": digits OCR misread
+const CARD_CHARS = /^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013\u2014\u2022\u200e\u200f\u20ac\u2605]*$/;
+const STATUS_BAR = /(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|[0-9]{1,3}[ \t]?%/;
+const productLabelLine = (line) => PRODUCT_WORD.test(line.replace(PRODUCT_BADGES, " ")) && PRODUCT_LABEL.test(line);
+const cardTextLine = (line) =>
+  !STATUS_BAR.test(line) && CARD_CHARS.test(line.replace(OCR_NUMBER, " ").replace(CARD_WORDS, "").replace(LONE_LETTER, ""));
+const isBlank = (line) => /^[ \t\r\f\v]*$/.test(line);
 const hasDigit = (s) => /[0-9]/.test(s);
 const matchAt = (re, text, pos) => { re.lastIndex = pos; return re.exec(text); };
 
@@ -127,6 +152,63 @@ function refuseAll(o, why) {
   o.warnings.push(why, "needs_manual_entry");
   o.missing = REQUIRED.filter((k) => o[k] === null);
   return o;
+}
+
+// The fare zone (a product label above the legs): the label line, the lines between it and the first
+// leg, and the Accept-button line below the legs. Amounts above the label or below the Accept line are
+// outside the card and ignored. Between the legs and the Accept line (or the end of the text) another
+// product label, or an amount that differs from the card's, may be a second offer cut off: refuse.
+function fareFromZone(o, L, fares, label, anchorLine, first, last) {
+  const lastLine = L.no(last), nLines = L.starts.length;
+  let acceptLine = null;
+  for (let n = lastLine + 1; n < nLines; n++) if (ACCEPT.test(L.line(n))) { acceptLine = n; break; }
+  const cardEnd = acceptLine !== null ? acceptLine : nLines;
+  const zoneStart = L.starts[label];
+  const zone = fares.filter((c) => zoneStart <= c[0] && c[0] < first);
+  const accept = fares.filter((c) => acceptLine !== null && L.no(c[0]) === acceptLine);
+  const below = fares.filter((c) => c[0] > last && L.no(c[0]) < cardEnd);
+  let garbled = false;
+  for (let n = label + 1; n < anchorLine; n++) if (garbledFareLine(L.line(n))) garbled = true;
+  const values = new Set([...zone.map((c) => c[2]), ...accept.map((c) => c[2])]);
+  let labelBelow = false;
+  for (let n = lastLine + 1; n < cardEnd; n++) if (productLabelLine(L.line(n))) labelBelow = true;
+  if (below.some((c) => !values.has(c[2])) || labelBelow) o.warnings.push("fare_ambiguous"); // a second offer below
+  else if (values.size > 1) o.warnings.push("fare_ambiguous");
+  else if (accept.length) o.fare = accept[0][2]; // the Accept button: the card's own fare
+  else if (garbled) o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
+  else if (zone.length) o.fare = zone[0][2];
+  else o.warnings.push("fare_missing"); // never look above the label
+}
+
+// No product label: the cycle-1 rules, but the window stops at the nearest line above the legs that is
+// not card text (status bar, notification, pill, banner); nothing at or above it counts.
+function fareWithoutLabel(o, L, allFares, used, first, anchorLine) {
+  let cut = -1;
+  for (let n = anchorLine - 1; n >= 0; n--) if (!isBlank(L.line(n)) && !cardTextLine(L.line(n))) { cut = n; break; }
+  const fares = allFares.filter((c) => L.no(c[0]) > cut);
+  const anchorNb = L.nb[anchorLine];
+  const plaus = fares.filter((c) => plausible(c[2], used));
+  const onAccept = new Set(plaus.filter((c) => c[3]).map((c) => c[2]));
+  const near = fares.filter((c) => c[0] < first && anchorNb - c[1] <= FARE_WINDOW_LINES);
+  const after = near.length ? near[near.length - 1][0] : -1;
+  let garbled = false;
+  for (let n = cut + 1; n < anchorLine; n++)
+    if (L.starts[n] > after && anchorNb - L.nb[n] <= FARE_WINDOW_LINES && garbledFareLine(L.line(n))) garbled = true;
+  if (onAccept.size) {
+    // The amount on the Accept button is the card's own fare; a different fare above the legs too: refuse.
+    const v = [...onAccept][0];
+    if (onAccept.size === 1 && !(near.length && near[near.length - 1][2] !== v)) o.fare = v;
+    else o.warnings.push("fare_ambiguous");
+  } else if (garbled) {
+    o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
+  } else if (near.length) {
+    const pick = near[near.length - 1];
+    // Another plausible fare elsewhere on the screen: never guess between them.
+    if (plaus.some((c) => c !== pick && c[2] !== pick[2])) o.warnings.push("fare_ambiguous");
+    else o.fare = pick[2];
+  } else if (fares.length) {
+    o.warnings.push("fare_not_near_legs");
+  }
 }
 
 // Returns numbers only. Raw text, rider names and addresses never leave this function.
@@ -208,29 +290,11 @@ export function parseOfferText(text) {
   if (used.length) {
     const first = Math.min(...used.map((l) => l[3])), last = Math.max(...used.map((l) => l[3]));
     if (fares.some((c) => first < c[0] && c[0] < last)) return refuseAll(o, "multiple_offers"); // stacked offers
-    const anchorLine = L.no(first), anchorNb = L.nb[anchorLine];
-    const plaus = fares.filter((c) => plausible(c[2], used));
-    const onAccept = new Set(plaus.filter((c) => c[3]).map((c) => c[2]));
-    const near = fares.filter((c) => c[0] < first && anchorNb - c[1] <= FARE_WINDOW_LINES);
-    const after = near.length ? near[near.length - 1][0] : -1;
-    let garbled = false;
-    for (let n = 0; n < anchorLine; n++)
-      if (L.starts[n] > after && anchorNb - L.nb[n] <= FARE_WINDOW_LINES && garbledFareLine(L.line(n))) garbled = true;
-    if (onAccept.size) {
-      // The amount on the Accept button is the card's own fare; a different fare above the legs too: refuse.
-      const v = [...onAccept][0];
-      if (onAccept.size === 1 && !(near.length && near[near.length - 1][2] !== v)) o.fare = v;
-      else o.warnings.push("fare_ambiguous");
-    } else if (garbled) {
-      o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
-    } else if (near.length) {
-      const pick = near[near.length - 1];
-      // Another plausible fare elsewhere on the screen: never guess between them.
-      if (plaus.some((c) => c !== pick && c[2] !== pick[2])) o.warnings.push("fare_ambiguous");
-      else o.fare = pick[2];
-    } else if (fares.length) {
-      o.warnings.push("fare_not_near_legs");
-    }
+    const anchorLine = L.no(first);
+    let label = null;
+    for (let n = anchorLine - 1; n >= 0; n--) if (productLabelLine(L.line(n))) { label = n; break; }
+    if (label !== null) fareFromZone(o, L, fares, label, anchorLine, first, last);
+    else fareWithoutLabel(o, L, fares, used, first, anchorLine);
   } else if (fares.length) {
     let values = new Set(fares.filter((c) => c[3]).map((c) => c[2]));
     if (!values.size) values = new Set(fares.map((c) => c[2]));

@@ -4,13 +4,19 @@ Reports:
   - scan field accuracy (per field and overall) and manual-fallback rate
   - verdict error on take-home per hour: median and 90th percentile
   - range coverage: share of cases where the real outcome fell inside [low, high]
+  - wrong_number_count: cases where the parser gave a value for a required field and it is wrong
+    (a refusal, None, never counts)
+  - false_accept_count: cases where the parsed verdict is ACCEPT but the verdict for the true
+    numbers is not ACCEPT (an expected null field makes the true verdict UNKNOWN)
+  - readable_manual_rate / readable_n: among cases whose 5 required fields are all on the card,
+    the share sent to manual entry
 Real (pilot) and synthetic cases are reported separately; goals are judged on
 pilot data when there is any, otherwise on synthetic (flagged as such).
 
 Usage:
   python tools/run_eval.py                    # print report
   python tools/run_eval.py --save reports/eval_latest.json
-  python tools/run_eval.py --baseline reports/eval_baseline.json   # exit 1 if median or p90 got worse
+  python tools/run_eval.py --baseline reports/eval_baseline.json   # exit 1 if median, p90, accuracy, wrong numbers or false accepts got worse
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fairfare import DriverProfile, estimate, parse_offer_text  # noqa: E402
-from fairfare.parser import REQUIRED  # noqa: E402
+from fairfare.parser import REQUIRED, Offer  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 TOLERANCE = {"fare": 0.01, "pickup_min": 1.0, "pickup_miles": 0.15, "trip_min": 1.0, "trip_miles": 0.15}
@@ -57,15 +63,29 @@ def field_ok(name: str, got, want) -> bool:
 def evaluate(cases: list[dict]) -> dict:
     field_hits = {f: 0 for f in REQUIRED}
     errors, covered, fallback, details = [], 0, 0, []
+    wrong_cases, false_accepts, readable_n, readable_manual = 0, 0, 0, 0
     for c in cases:
         offer = parse_offer_text(c["ocr_text"])
+        want = c["expected_fields"]
+        wrong_fields = []
         for f in REQUIRED:
-            field_hits[f] += field_ok(f, getattr(offer, f), c["expected_fields"].get(f))
+            ok = field_ok(f, getattr(offer, f), want.get(f))
+            field_hits[f] += ok
+            if not ok and getattr(offer, f) is not None:
+                wrong_fields.append(f)  # a value was given and it is wrong (refusals never count)
+        wrong_cases += bool(wrong_fields)
         if offer.missing:
             fallback += 1
-        v = estimate(offer, DriverProfile(**c.get("profile", {})))
+        if all(want.get(f) is not None for f in REQUIRED):
+            readable_n += 1
+            readable_manual += bool(offer.missing)
+        profile = DriverProfile(**c.get("profile", {}))
+        v = estimate(offer, profile)
+        true_v = estimate(Offer(**{f: want.get(f) for f in REQUIRED}), profile)
+        false_accepts += v.decision == "ACCEPT" and true_v.decision != "ACCEPT"
         out = c.get("outcome")
-        row = {"id": c["id"], "decision": v.decision, "confidence": v.confidence, "missing": offer.missing}
+        row = {"id": c["id"], "decision": v.decision, "confidence": v.confidence, "missing": offer.missing,
+               "wrong_fields": wrong_fields, "true_decision": true_v.decision}
         if out and v.per_hour_mid is not None and out["minutes"] > 0:
             actual = out["take_home"] / (out["minutes"] / 60)
             err = abs(v.per_hour_mid - actual) / max(abs(actual), 1e-9)
@@ -84,6 +104,10 @@ def evaluate(cases: list[dict]) -> dict:
         "verdict_median_error": round(statistics.median(errors), 4) if errors else None,
         "verdict_p90_error": round(pct(errors, 0.9), 4) if errors else None,
         "range_coverage": round(covered / len(errors), 4) if errors else None,
+        "wrong_number_count": wrong_cases,
+        "false_accept_count": false_accepts,
+        "readable_n": readable_n,
+        "readable_manual_rate": round(readable_manual / readable_n, 4) if readable_n else None,
         "cases": details,
     }
 
@@ -107,7 +131,9 @@ def main() -> int:
         r = report[name]
         print(f"[{name}] cases={r['n_cases']} scan_acc={r['scan_accuracy_overall']} "
               f"fallback={r['manual_fallback_rate']} median_err={r['verdict_median_error']} "
-              f"p90_err={r['verdict_p90_error']} coverage={r['range_coverage']}")
+              f"p90_err={r['verdict_p90_error']} coverage={r['range_coverage']} "
+              f"wrong_numbers={r['wrong_number_count']} false_accepts={r['false_accept_count']} "
+              f"readable_manual={r['readable_manual_rate']} (n={r['readable_n']})")
         if args.verbose:
             for row in r["cases"]:
                 print("   ", row)
@@ -127,6 +153,10 @@ def main() -> int:
         for m in ("verdict_median_error", "verdict_p90_error"):
             old, new = base[key].get(m), report[key].get(m)
             if old is not None and new is not None and new > old + 1e-9:
+                worse.append(f"{m}: {old} -> {new}")
+        for m in ("wrong_number_count", "false_accept_count"):
+            old, new = base[key].get(m), report[key].get(m)  # older baselines lack these: skipped
+            if old is not None and new is not None and new > old:
                 worse.append(f"{m}: {old} -> {new}")
         if (base[key].get("scan_accuracy_overall") or 0) > (report[key].get("scan_accuracy_overall") or 0) + 1e-9:
             worse.append(f"scan_accuracy_overall: {base[key]['scan_accuracy_overall']} -> {report[key]['scan_accuracy_overall']}")

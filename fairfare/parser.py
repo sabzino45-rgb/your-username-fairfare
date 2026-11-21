@@ -112,6 +112,30 @@ _LEG = re.compile(
     re.I | re.ASCII,
 )
 _RATING = re.compile(_NUM + r"\s*[★*]")
+# Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
+# "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
+_PRODUCT_NAMES = (r"uber[ \t]+x[ \t]+share|uber[ \t]+pet|comfort[ \t]+electric|uberxl|uberx|xl|comfort|"
+                  r"green|exec|executive|lux|black|pet|access|assist|wav|exclusive|priority|share|electric|taxi")
+# A product-label line: only names from that list, separators, and optionally the fare amount.
+_PRODUCT_LABEL = re.compile(
+    r"^(?:[^A-Za-z0-9£]|£[ \t]?[0-9OoIl]+(?:[.,][0-9OoIl]{1,2})?|\b(?:" + _PRODUCT_NAMES + r")\b)*$", re.I | re.ASCII)
+# The anchor needs a ride-type name: a line of badges only ("Exclusive", "Priority") can sit
+# below the fare ("£13.75" / "Exclusive" / legs), so it is card text but never the anchor.
+_PRODUCT_BADGES = re.compile(r"\b(?:exclusive|priority)\b", re.I | re.ASCII)
+_PRODUCT_WORD = re.compile(r"\b(?:" + _PRODUCT_NAMES + r")\b", re.I | re.ASCII)
+# Card text: once numbers (with OCR's O/o/I/l), the words below (product names, units, leg labels,
+# the Accept button, surge/boost lines, rate lines) and lone letters ("4.89 x", "E11.10") are
+# removed, a card-text line holds only ASCII punctuation, spaces and a few symbols (£ · – — • € ★,
+# direction marks). Any other letter, in any script, means ordinary words: a notification, a pill,
+# a banner. A status-bar line (clock or battery %) is not card text either.
+_CARD_WORDS = re.compile(
+    r"\b(?:" + _PRODUCT_NAMES + r"|uber|accept|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|"
+    r"surge|boost|includes?|included|incl|per)\b", re.I | re.ASCII)
+_LONE_LETTER = re.compile(r"\b[A-Za-z]\b", re.ASCII)
+_OCR_NUMBER = re.compile(r"[0-9OoIl]*[0-9][0-9OoIl]*", re.ASCII)  # "4.9l", "£1O.80": digits OCR misread
+_CARD_CHARS = re.compile(r"^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013\u2014\u2022\u200e\u200f\u20ac\u2605]*$")
+# A status-bar line: a clock ("14:05") or a battery level ("87%").
+_STATUS_BAR = re.compile(r"(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|[0-9]{1,3}[ \t]?%", re.ASCII)
 
 
 def _f(s: str) -> float:
@@ -167,6 +191,17 @@ def _garbled_fare_line(line: str) -> bool:
     return bool(g) and (g.group(1) is not None or _f(g.group(2).translate(_OCR_DIGITS)) > 5)
 
 
+def _product_label_line(line: str) -> bool:
+    return bool(_PRODUCT_WORD.search(_PRODUCT_BADGES.sub(" ", line))) and bool(_PRODUCT_LABEL.match(line))
+
+
+def _card_text_line(line: str) -> bool:
+    """False for a status-bar line or a line with ordinary words (notification, pill, banner)."""
+    if _STATUS_BAR.search(line):
+        return False
+    return bool(_CARD_CHARS.match(_LONE_LETTER.sub("", _CARD_WORDS.sub("", _OCR_NUMBER.sub(" ", line)))))
+
+
 def _plausible(value: float, legs: list) -> bool:
     miles = sum(l[2] for l in legs)
     mins = sum(l[1] for l in legs)
@@ -180,6 +215,74 @@ def _refuse_all(offer: Offer, why: str) -> Offer:
     offer.fare = offer.surge = None
     offer.warnings += [why, "needs_manual_entry"]
     return offer
+
+
+def _fare_from_zone(offer: Offer, lines: _Lines, fares: list, label: int, anchor_line: int,
+                    first: int, last: int) -> None:
+    """The fare zone (a product label above the legs): the label line, the lines between it and the
+    first leg, and the Accept-button line below the legs. Amounts above the label or below the
+    Accept line are outside the card and ignored. Between the legs and the Accept line (or the end
+    of the text, if there is no Accept line) another product label, or a fare-shaped amount that
+    differs from the card's, may be the start of a second offer (a card cut off): the fare is
+    refused, as in cycle 1."""
+    last_line = lines.no(last)
+    n_lines = len(lines.starts)
+    accept_line = next((n for n in range(last_line + 1, n_lines) if _ACCEPT.search(lines.line(n))), None)
+    card_end = accept_line if accept_line is not None else n_lines
+    zone_start = lines.starts[label]
+    zone = [c for c in fares if zone_start <= c[0] < first]
+    accept = [c for c in fares if accept_line is not None and lines.no(c[0]) == accept_line]
+    below = [c for c in fares if c[0] > last and lines.no(c[0]) < card_end]
+    garbled = any(_garbled_fare_line(lines.line(n)) for n in range(label + 1, anchor_line))
+    values = {c[2] for c in zone} | {c[2] for c in accept}
+    if any(c[2] not in values for c in below) or any(_product_label_line(lines.line(n)) for n in range(last_line + 1, card_end)):
+        offer.warnings.append("fare_ambiguous")  # a second offer starts below this one
+    elif len(values) > 1:
+        offer.warnings.append("fare_ambiguous")
+    elif accept:
+        offer.fare = accept[0][2]  # the Accept button: the card's own fare
+    elif garbled:
+        offer.warnings.append("fare_unreadable")  # the card's own fare line is misread: don't substitute
+    elif zone:
+        offer.fare = zone[0][2]
+    else:
+        offer.warnings.append("fare_missing")  # never look above the label
+
+
+def _fare_without_label(offer: Offer, lines: _Lines, fares: list, used: list, first: int,
+                        anchor_line: int) -> None:
+    """No product label: the cycle-1 rules, but the window stops at the nearest line above the legs
+    that is not card text (status bar, notification, pill, banner); nothing at or above it counts."""
+    cut = next((n for n in range(anchor_line - 1, -1, -1)
+                if not _BLANK.match(lines.line(n)) and not _card_text_line(lines.line(n))), -1)
+    fares = [c for c in fares if lines.no(c[0]) > cut]
+    anchor_nb = lines.nb[anchor_line]
+    plausible = [c for c in fares if _plausible(c[2], used)]
+    on_accept = {c[2] for c in plausible if c[3]}
+    near = [c for c in fares if c[0] < first and anchor_nb - c[1] <= _FARE_WINDOW_LINES]
+    after = near[-1][0] if near else -1
+    garbled = any(
+        lines.starts[n] > after and anchor_nb - lines.nb[n] <= _FARE_WINDOW_LINES
+        and _garbled_fare_line(lines.line(n))
+        for n in range(cut + 1, anchor_line))
+    if on_accept:
+        # The amount on the Accept button is the card's own fare.
+        # A different fare above the legs as well means we can't tell: refuse.
+        if len(on_accept) == 1 and not (near and near[-1][2] not in on_accept):
+            offer.fare = on_accept.pop()
+        else:
+            offer.warnings.append("fare_ambiguous")
+    elif garbled:
+        offer.warnings.append("fare_unreadable")  # the card's own fare line is misread: don't substitute
+    elif near:
+        pick = near[-1]
+        if any(c[2] != pick[2] for c in plausible if c is not pick):
+            # Another plausible fare elsewhere on the screen: never guess between them.
+            offer.warnings.append("fare_ambiguous")
+        else:
+            offer.fare = pick[2]
+    elif fares:
+        offer.warnings.append("fare_not_near_legs")
 
 
 def parse_offer_text(text: str) -> Offer:
@@ -271,33 +374,11 @@ def parse_offer_text(text: str) -> Offer:
         if any(first < c[0] < last for c in fares):
             return _refuse_all(offer, "multiple_offers")  # a second fare between the legs: stacked offers
         anchor_line = lines.no(first)
-        anchor_nb = lines.nb[anchor_line]
-        plausible = [c for c in fares if _plausible(c[2], used)]
-        on_accept = {c[2] for c in plausible if c[3]}
-        near = [c for c in fares if c[0] < first and anchor_nb - c[1] <= _FARE_WINDOW_LINES]
-        after = near[-1][0] if near else -1
-        garbled = any(
-            lines.starts[n] > after and anchor_nb - lines.nb[n] <= _FARE_WINDOW_LINES
-            and _garbled_fare_line(lines.line(n))
-            for n in range(anchor_line))
-        if on_accept:
-            # The amount on the Accept button is the card's own fare.
-            # A different fare above the legs as well means we can't tell: refuse.
-            if len(on_accept) == 1 and not (near and near[-1][2] not in on_accept):
-                offer.fare = on_accept.pop()
-            else:
-                offer.warnings.append("fare_ambiguous")
-        elif garbled:
-            offer.warnings.append("fare_unreadable")  # the card's own fare line is misread: don't substitute
-        elif near:
-            pick = near[-1]
-            if any(c[2] != pick[2] for c in plausible if c is not pick):
-                # Another plausible fare elsewhere on the screen: never guess between them.
-                offer.warnings.append("fare_ambiguous")
-            else:
-                offer.fare = pick[2]
-        elif fares:
-            offer.warnings.append("fare_not_near_legs")
+        label = next((n for n in range(anchor_line - 1, -1, -1) if _product_label_line(lines.line(n))), None)
+        if label is not None:
+            _fare_from_zone(offer, lines, fares, label, anchor_line, first, last)
+        else:
+            _fare_without_label(offer, lines, fares, used, first, anchor_line)
     elif fares:
         values = {c[2] for c in fares if c[3]} or {c[2] for c in fares}
         if len(values) == 1:
