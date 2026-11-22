@@ -32,3 +32,12 @@ _Owned by the Orchestrator. Append only. Each entry has the date, the decision, 
 - Pasted text risk: accepted; pasting offer text stays.
 - Go live: owner approved going live, but it cannot happen yet: the reader risk is not accepted, and GitHub shows Pages still off (latest Publish app run, 2026-11-20 19:14, "Get Pages site failed... Not Found") and no Ticketmaster key ("ticketmaster_no_key").
 - Next: cycle 3 tests and fixes the reader on the owner's real screenshots to close the risk; then release, once Pages is on.
+
+## 2026-11-22 - Cycle 3: HOLD (all reviews PASS), waiting on the owner
+- Input: the owner's first real Uber offer card (pilot-0001, redacted text) and real pay figures (git-ignored).
+- Goal: pilot scan_accuracy_overall >= 1.0. Met: the real card reads all 5 fields (ACCEPT); synthetic 206 cases: 0 wrong numbers, 0 false ACCEPTs.
+- Built over 2 attempts: real-layout rules (fare sub-amount lines such as holiday entitlement/tips/fees never become the fare; "Match" counts as Accept; ride-label OCR junk; unlabelled legs read top to bottom, leg words count only on the leg's own line); screenshot legs ordered by on-screen y position; garbled pence and digit-eaten legs refused; fare-per-mile cap raised to £10 to fit real short trips.
+- Reviews: QA PASS (attempt 2), Privacy PASS, Economics PASS, Ops PASS.
+- Open (QA, medium): OCR occasionally misreads pence upward (3 in 172 scans, up to £0.60); real-OCR manual entry 19-21% vs 15% target (all correct refusals); default per-mile minimum differs (Python £1.00, app £0.90).
+- Gate HOLD on owner items in reports/cycle-3/human_gates.md: 10+ held-back real screenshots to close the reader risk the owner did not accept; re-decide that risk afterwards; redact.py must be extended before more pilot cards; decide on map labels and a deletion date for stored screenshots and pay figures.
+- Nothing shipped. Work on branch cycle-3.
