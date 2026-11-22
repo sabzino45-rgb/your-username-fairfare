@@ -1,4 +1,5 @@
-import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromWords, reconcileScanFare, cleanPixels } from "./engine.js";
+import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromWords, reconcileScanFare, cleanPixels,
+  orderLegsByPosition, reconcileLegOrder } from "./engine.js";
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
 import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd } from "./demand.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
@@ -77,7 +78,7 @@ let offerGen = 0, verdictGen = -1;
 let scanState = null, scanSeq = 0;
 // Word heights from the last screenshot's OCR, for the text that pass produced. The height check only
 // applies while lastText is still exactly that text (editing the box makes it pasted text again).
-let scanGeo = null; // { text, words: [{ text, height, prev }] }
+let scanGeo = null; // { text, words: [{ text, height, prev }], legsOk }
 const MAX_TEXT = 5000; // cap pasted or OCR text before parsing (huge pastes froze the page)
 const cancelScan = () => { scanSeq++; scanState = null; scanGeo = null; };
 
@@ -197,7 +198,10 @@ function updateCheck() {
   } else {
     o = parseOfferText(lastText);
     // Screenshot: the fare must also be the tallest amount on screen, or it goes to manual entry.
-    if (scanGeo && scanGeo.text === lastText) o = reconcileScanFare(o, fareFromWords(scanGeo.words), lastText);
+    if (scanGeo && scanGeo.text === lastText) {
+      o = reconcileScanFare(o, fareFromWords(scanGeo.words), lastText);
+      o = reconcileLegOrder(o, scanGeo.legsOk); // bare legs whose screen order is unknown: manual entry
+    }
     // What was read from the card has numbers in it, so it lives inside Details too (SAFETY.md).
     readout = lastText.trim() ? `<p class="readout">${esc(t("check.read"))}: ` + Object.keys(FIELD).map((k) =>
       o[k] === null ? `<span class="miss">${esc(t(FIELD[k]).replace(/\s*\(.*\)/, ""))}: ${esc(t("check.notFound"))}</span>`
@@ -307,11 +311,11 @@ async function scanImage(file) {
   offerGen++;
   lastText = "";
   scanGeo = null;
-  const finish = (state, text = "", words = null) => {
+  const finish = (state, text = "", words = null, legsOk = true) => {
     if (my !== scanSeq) return; // a newer scan (or typed input) has taken over
     scanState = state;
     lastText = text;
-    scanGeo = words ? { text, words } : null;
+    scanGeo = words ? { text, words, legsOk } : null;
     if (!$("#verdict")) return; // Check screen not open: renderCheck shows this state when it is
     $("#ocr").value = text;
     $("#scan-status").textContent = state === "failed" ? t("check.scanFailed") : "";
@@ -328,10 +332,15 @@ async function scanImage(file) {
     // Each pass keeps its text and its word heights (bbox y1 - y0) for the fare height check.
     const read = async (scale) => {
       const d = (await worker.recognize(prepareForOcr(bmp, scale), {}, { text: true, blocks: true })).data || {};
-      const words = [];
-      for (const l of d.lines || []) (l.words || []).forEach((w, i) => words.push({
-        text: w.text || "", height: w.bbox ? w.bbox.y1 - w.bbox.y0 : 0, prev: i ? l.words[i - 1].text || "" : "" }));
-      return { text: (d.text || "").slice(0, MAX_TEXT), words };
+      const words = [], lines = [];
+      for (const l of d.lines || []) {
+        (l.words || []).forEach((w, i) => words.push({
+          text: w.text || "", height: w.bbox ? w.bbox.y1 - w.bbox.y0 : 0, prev: i ? l.words[i - 1].text || "" : "" }));
+        lines.push({ text: l.text || "", y: l.bbox ? l.bbox.y0 : NaN }); // line tops: the legs' screen order
+      }
+      // Leg lines back in screen order (OCR may emit them out of order); see engine.js orderLegsByPosition.
+      const ord = orderLegsByPosition((d.text || "").slice(0, MAX_TEXT), lines);
+      return { text: ord.text, words, legsOk: ord.ok };
     };
     await worker.setParameters({ tessedit_pageseg_mode: "11" });
     let pass = await read(1);
@@ -343,7 +352,7 @@ async function scanImage(file) {
     }
     if (bmp.close) bmp.close();
     if (parseOfferText(pass.text).missing.length === 5) finish("failed");
-    else finish(null, pass.text, pass.words);
+    else finish(null, pass.text, pass.words, pass.legsOk);
   } catch {
     finish("failed");
   } finally {

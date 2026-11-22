@@ -117,6 +117,11 @@ _LEG = re.compile(
     re.I | re.ASCII,
 )
 _RATING = re.compile(_NUM + r"\s*[★*]")
+# Attempt 2 (real OCR on replicas): a connector glyph next to a leg can eat the leg's leading number ("min (1.1 mi)",
+# "hr 4 mins (39.5 mi)"). A line with a distance but no readable leg, or a leg right after a bare hours word, is a
+# garbled leg line; bare legs are then not assigned by order (the remaining one may be either leg).
+_DIST_TOKEN = re.compile(r"(?<![A-Za-z0-9.,/])[0-9]+(?:[.,][0-9]+)?[ \t]*(?:mi|miles?|km)\b", re.I | re.ASCII)
+_HOUR_BEFORE = re.compile(r"(?:^|[^A-Za-z])(?:hours?|hrs?|h)[ \t]*$", re.I | re.ASCII)
 # Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
 # "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
 # Attempt 2: "Uber" may stand before any name, with or without a space or hyphen ("Uber X", "Uber-X",
@@ -196,6 +201,7 @@ class _Lines:
         self.starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "\n"]
         # nb[n]: how many non-blank lines come before line n; nonblank: indices of non-blank lines.
         self.nb, self.nonblank = [], []
+        self.partial = set()  # lines holding a fare-shaped £ amount whose pence are garbled
         for n in range(len(self.starts)):
             self.nb.append(len(self.nonblank))
             if not _BLANK.match(self.line(n)):
@@ -227,6 +233,16 @@ def _fix_leg_token(m: re.Match) -> str:
     if not re.search(r"[0-9]", tok):
         return m.group(0)
     return m.group(1) + tok.translate(_OCR_DIGITS)
+
+
+# Attempt 2: pence lost or garbled ("£33.°", "£16.4:", "£21.3", "£18.,"): one decimal digit, or a stray mark right
+# after the amount. UK cards always show 2 decimals, so this is a misread, not a fare.
+_PARTIAL_TAIL = re.compile(r"[.,:;°]")
+_ONE_DECIMAL = re.compile(r"[.,][0-9OoIl]$", re.ASCII)
+
+
+def _partial_pence(m: re.Match, text: str) -> bool:
+    return bool(_ONE_DECIMAL.search(m.group(1))) or bool(_PARTIAL_TAIL.match(text, m.end()))
 
 
 def _garbled_fare_line(line: str) -> bool:
@@ -337,7 +353,8 @@ def _fare_from_zone(offer: Offer, lines: _Lines, fares: list, label: int, anchor
     zone = [c for c in fares if zone_start <= c[0] < first and not c[3]]  # Accept counts only below the legs
     accept = [c for c in fares if accept_line is not None and lines.no(c[0]) == accept_line]
     below = [c for c in fares if c[0] > last and lines.no(c[0]) < card_end]
-    garbled = any(_garbled_fare_line(lines.line(n)) for n in range(label + 1, anchor_line))
+    garbled = (any(_garbled_fare_line(lines.line(n)) for n in range(label + 1, anchor_line))
+               or any(label <= n < anchor_line for n in lines.partial))
     values = {c[2] for c in zone} | {c[2] for c in accept}
     if any(c[2] not in values for c in below) or any(_product_label_line(lines.line(n)) for n in range(last_line + 1, card_end)):
         offer.warnings.append("fare_ambiguous")  # a second offer starts below this one
@@ -382,7 +399,7 @@ def _fare_below_cut(offer: Offer, lines: _Lines, fares: list, used: list, first:
     after = near[-1][0] if near else -1
     garbled = any(
         lines.starts[n] > after and anchor_nb - lines.nb[n] <= _FARE_WINDOW_LINES
-        and _garbled_fare_line(lines.line(n))
+        and (_garbled_fare_line(lines.line(n)) or n in lines.partial)
         for n in range(cut + 1, anchor_line))
     if on_accept:
         # The amount on the Accept button is the card's own fare.
@@ -421,19 +438,31 @@ def parse_offer_text(text: str) -> Offer:
         offer.surge = _f(surge_m.group(1))
 
     legs = []  # (label, minutes, miles, position)
+    garbled_legs = set()  # line numbers of garbled leg lines
     for m in _LEG.finditer(text):
         if _NOT_LEG.search(lines.line(lines.no(m.start()))):
             continue  # navigation bar ("14 min · 5.2 mi · arrive 18:02"), not an offer leg
+        if _HOUR_BEFORE.search(text[lines.starts[lines.no(m.start())]:m.start()]):
+            garbled_legs.add(lines.no(m.start()))  # "hr 4 mins (39.5 mi)": the hours' number was lost
+            continue
         if m.group(1) is not None:
             minutes = int(m.group(1)) * 60 + (int(m.group(2)) if m.group(2) is not None else 0)
         else:
             minutes = _f(m.group(3))
         dist, unit, label = _f(m.group(4)), m.group(5), (m.group(6) or "").lower()
         # Look just before the match too, for layouts like "Pickup: 6 min · 1.8 mi"
-        before = text[max(0, m.start() - 12):m.start()].lower()
+        # Attempt 2: only on the leg's own line. A "trip" word on the line above ("Long trip", "Trip Radar")
+        # is not this leg's label; bare legs are then ordered top to bottom.
+        before = text[max(lines.starts[lines.no(m.start())], m.start() - 12):m.start()].lower()
         if not label:
             label = "pickup" if "pickup" in before else "trip" if "trip" in before else ""
         legs.append((label, float(minutes), _miles(dist, unit), m.start()))
+
+    leg_lines = {lines.no(l[3]) for l in legs}
+    for n in range(len(lines.starts)):
+        ln = lines.line(n)
+        if n not in leg_lines and "£" not in ln and _DIST_TOKEN.search(ln) and not _NOT_LEG.search(ln):
+            garbled_legs.add(n)  # a distance with no readable leg: "min (1.1 mi)"
 
     pickups = [l for l in legs if l[0] in ("away", "pickup")]
     trips = [l for l in legs if l[0] == "trip"]
@@ -475,6 +504,9 @@ def parse_offer_text(text: str) -> Offer:
         if _NOT_FARE.search(line) or not _FARE_PREFIX_OK.match(prefix) or prefix.rstrip().endswith("+"):
             continue
         if _RATE_AFTER.match(text, m.end()):
+            continue
+        if _partial_pence(m, text):
+            lines.partial.add(n)  # attempt 2: "£33.°", "£16.4:" - pence lost; never repaired, the line is garbled
             continue
         value, end = _f(m.group(1).translate(_OCR_DIGITS)), m.end()
         rng = _RANGE_AFTER.match(text, m.end())
@@ -518,7 +550,10 @@ def parse_offer_text(text: str) -> Offer:
 
     pickup = pickups[0] if pickups else None
     trip = trips[0] if trips else None
-    # Unlabeled legs: Uber shows pickup first, then trip.
+    # Unlabeled legs: Uber shows pickup first, then trip. Not when another leg line is garbled (attempt 2).
+    if unlabeled and garbled_legs:
+        offer.warnings.append("leg_unreadable")
+        unlabeled = []
     if pickup is None and unlabeled:
         pickup = unlabeled.pop(0)
         offer.warnings.append("pickup_inferred_from_order")

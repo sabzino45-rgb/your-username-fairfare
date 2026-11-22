@@ -202,3 +202,54 @@ def test_js_matches_python_and_screen_path_on_real_layout():
     # Label with junk, or a Match button: the screenshot card-marker rule finds the card.
     assert out["marker"][0] and out["marker"][1]
     assert out["geo"] == [21.85, None, None]
+
+
+# ---- Attempt 2 (QA cycle 3 F1, F3). My own texts, not QA's probes.
+
+@pytest.mark.parametrize("word", ["Long trip", "Trip", "Trip Radar", "Exclusive trip", "Shared trip", "50+ min trip",
+                                  "£16.10 previous trip", "Your pickup"])
+def test_trip_or_pickup_word_on_the_line_above_does_not_label_a_bare_leg(word):
+    o = parse_offer_text(real_card(subs=("£2.11 est. holiday entitlement included", word),
+                                   leg1="3 min (0.6 mi)", leg2="36 mins (18.4 mi)"))
+    assert (o.pickup_min, o.pickup_miles, o.trip_min, o.trip_miles) == (3, 0.6, 36, 18.4), o.warnings
+    assert "pickup_inferred_from_order" in o.warnings and "trip_inferred_from_order" in o.warnings
+
+
+def test_label_on_the_legs_own_line_still_counts():
+    o = parse_offer_text("UberX\n£14.20\nTrip: 18 min · 7.1 mi\nPickup: 5 min · 1.6 mi\n")
+    assert (o.pickup_min, o.trip_min) == (5, 18)
+    o = parse_offer_text("UberX\n£14.20\n18 mins (7.1 mi) trip\n5 mins (1.6 mi) away\n")
+    assert (o.pickup_min, o.trip_min) == (5, 18)
+
+
+@pytest.mark.parametrize("fare", ["£33.°", "£16.4: ©", "£16.4.: «", "£21.3", "£18.,", "£16.:", "£12.;"])
+def test_garbled_pence_is_refused_not_repaired(fare):
+    o = parse_offer_text(real_card(fare=fare))
+    assert o.fare is None and "fare_unreadable" in o.warnings, o.warnings
+    # Same without a label (pasted text, label lost).
+    o = parse_offer_text(real_card(top=(), label="", junk=None, fare=fare))
+    assert o.fare is None
+
+
+def test_garbled_pence_elsewhere_does_not_block_a_clean_fare():
+    # A whole-pound amount and a clean fare are unaffected; a garbled amount on the Match button is not a fare.
+    assert parse_offer_text("UberX\n£12\n6 mins (1.8 mi) away\n18 mins (7.2 mi) trip").fare == 12
+    assert parse_offer_text(real_card(button="Match £21.8:")).fare == 21.85
+
+
+@pytest.mark.parametrize("leg1,leg2", [("min (1.4 mi)", "38 mins (19.7 mi)"), ("hr 20 mins (25.0 mi)", "9 mins (3.1 mi)"),
+                                       ("5 min (1.6 mi)", "mins (7.0 mi)"), ("| hr 4 mins (39.5 mi)", "12 mins (5.4 mi)")])
+def test_garbled_leg_line_stops_bare_leg_order_inference(leg1, leg2):
+    """Real OCR on my replicas: a connector glyph glued to a leg ate its leading number. The remaining bare leg
+    may be either leg, and "hr 20 mins" is not 20 minutes: no bare leg is assigned."""
+    o = parse_offer_text(real_card(leg1=leg1, leg2=leg2))
+    assert (o.pickup_min, o.pickup_miles, o.trip_min, o.trip_miles) == (None,) * 4
+    assert "leg_unreadable" in o.warnings
+
+
+def test_distance_lines_that_are_not_legs_elsewhere():
+    # Labelled legs are unaffected by a stray distance line; a rate line is not a distance.
+    o = parse_offer_text("UberX\n£14.20\n£1.14/mi · £0.62/min\n6 mins (2.1 mi) away\n17 mins (8.1 mi) trip\nWithin 3 mi")
+    assert (o.pickup_min, o.trip_min) == (6, 17)
+    o = parse_offer_text(real_card(subs=("£2.11 est. holiday entitlement included", "£1.14/mi")))
+    assert (o.pickup_min, o.trip_min) == (14, 23)

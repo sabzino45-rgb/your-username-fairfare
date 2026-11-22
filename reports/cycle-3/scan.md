@@ -124,3 +124,97 @@ No engine contains any pilot-0001 string or number. The R2 cases and the tests u
   - Captioned sub-amounts cannot cause this: they are never candidates, and the smaller-than-fare rule refuses a stray amount below a sub-amount.
   - Only held-back real screenshots can measure how often this happens (human_gates.md).
 - No app.js change was needed: the height cross-check already ignored the small sub-amount words.
+
+---
+
+# Attempt 2 (after QA BLOCK, reports/cycle-3/qa.md)
+
+**All of this is synthetic or my own drawn replicas, plus the one real card.** I read qa.md for the failure mechanisms only. I did not open, use or tune on any case in `reports/cycle-3/qa_probes/`.
+
+## Fixes (parser.py and engine.js identical; app.js scan path)
+
+**F1, High. A "trip" word on the line above swapped the bare legs.**
+- Root cause, confirmed: the leg-label lookback (`before`, the 12 characters before the match) crossed the newline. "Long trip", "Trip Radar" or "£… previous trip" on the line above labelled the first bare leg as the trip.
+- The lookback now stops at the start of the leg's own line, so pickup/trip/away count only on the leg's own line. Bare legs are taken top to bottom.
+- "Pickup: 5 min · 1.6 mi" and "18 mins (7.1 mi) trip" still work.
+
+**F2, High. OCR text order is not screen order.** Two parts:
+- **New `orderLegsByPosition(text, lines)` in engine.js.** It is a pure function: Node tests check it in `tests/test_js_leg_order.py`, and app.js calls the same function.
+  - app.js now collects each Tesseract line's text and box top (`data.lines[].bbox.y0`).
+  - The function finds every leg line of the OCR text among the OCR lines, using whitespace-normalised equality, and rewrites the text with the leg lines in top-to-bottom order. Only those lines move.
+  - It returns `ok: false` if a leg line cannot be found among the OCR lines, or its box is missing.
+  - The reordered text is what the app shows, parses and checks against the height signal, so the existing `scanGeo.text === lastText` rule still holds.
+- **New `reconcileLegOrder(offer, ok)`.** On a screenshot whose legs are bare (order inferred) and whose order is unconfirmed (`ok` false), all four leg fields go to manual entry (`leg_order_unconfirmed`). Labelled legs are never refused for this.
+
+**New risk, found by my own real-OCR replicas. A connector glyph glued to a leg ate its leading number.**
+- Examples: "min (1.1 mi)", and "hr 4 mins (39.5 mi)", which the old rules read as a **4-minute** leg.
+- Under the cycle-2 rules, "hr 20 mins (25.0 mi)" was read as a 20-minute pickup and gave a **false ACCEPT** (syn-rl2-019 under HEAD).
+- A remaining single bare leg was also taken as the pickup when it was the trip.
+- **Rule:**
+  - A leg match right after a bare hours word ("hr", "hrs", "h") on its line is not a leg.
+  - A line with a distance ("1.1 mi", "3 km") but no readable leg, no £ and no navigation word is a garbled leg line.
+  - If any garbled leg line exists, bare legs are **not assigned by order** (`leg_unreadable`).
+
+**F3, Medium. Garbled pence are refused, not repaired.**
+- A £ amount with exactly one decimal digit ("£21.3"), or followed directly by `. , : ; °` ("£33.°", "£16.4:", "£18.,", "£16.:"), is never a candidate.
+- Its line counts as a garbled fare line, so the fare is None (`fare_unreadable`) in the label zone and in the no-label window.
+- Whole-pound amounts ("£12") are unchanged. A garbled amount on the Match line is simply not a fare.
+
+**F6, Medium. run_eval false ACCEPTs now use the app's defaults as well.**
+- `tools/run_eval.py` has `APP_DEFAULTS` (targetHr 18, minMile 0.9, costMile 0.2, commission 0).
+- `false_accept_count` now counts a case if it is a false ACCEPT under verdict.py's `DriverProfile()` **or** under the app's defaults, so the app's lower £0.90/mile floor can no longer hide one.
+- A test checks `APP_DEFAULTS` against engine.js `DEFAULT_SETTINGS`.
+- verdict.py's own default (£1.00/mile) is **not** changed. It is the verdict-modeler's, and changing it would move every verdict row. The mismatch is flagged for the Orchestrator.
+- All counts stayed 0.
+
+**Not done: the optional third OCR pass on the fare region.** I could not show it cannot add wrong numbers: a re-read at a new scale is another chance of an upward digit misread, which no rule sees (QA F4). Garbled fares stay manual entry.
+
+## Numbers
+
+| | attempt 1 | attempt 2 |
+|---|---|---|
+| pilot scan_accuracy_overall / readable_manual / wrong / false ACCEPT | 1.0 / 0 / 0 / 0 | 1.0 / 0 / 0 / 0 |
+| synthetic, all files: cases | 186 | 206 |
+| synthetic wrong numbers / false ACCEPTs (Python or app defaults) | 0 / 0 | 0 / 0 |
+| synthetic readable_manual_rate | 0.0 (n=125) | 0.0 (n=136) |
+| verdict median / p90 / coverage | 0.0819 / 0.2214 / 0.9412 | unchanged |
+
+- **New file `eval_set/synthetic_real_layout_2.jsonl`** (20 cases):
+  - 7 "trip"-word lines above bare legs, plus a "previous trip" amount;
+  - 2 same-line label checks;
+  - 6 garbled-pence fares and a garbled Match amount;
+  - 3 garbled-leg cards.
+- **Before** (`eval_real_layout_2_before.json`, attempt-1 code, first 17 cases): 13 wrong numbers and **13 false ACCEPTs**. The 3 garbled-leg cases were added afterwards; under the cycle-2 rules (HEAD) they give 3 wrong legs and 1 false ACCEPT.
+- **After** (`eval_real_layout_2.json`): 0 wrong numbers, 0 false ACCEPTs, 0 of 11 readable cards refused.
+- All 186 earlier synthetic rows are identical to attempt 1.
+- QA's cycle-2 probe sets (97 texts, counted only, not read): output unchanged.
+- `pytest -q`: 132 passed. `run_eval --baseline reports/cycle-3/eval_before.json`: exit 0.
+
+## Real OCR through the app (port 8798, stopped afterwards; `reports/cycle-3/scan_ocr/replicas_attempt2.json`)
+
+**Owner's r01.png** (not copied; its OCR text was not stored):
+- verdict **ACCEPT**, all 5 fields correct (£30.27, 21 min / 8.2 mi, 12 min / 4.6 mi).
+
+**My replicas: 11 readable cards plus adversarial x1, light and dark (24 scans).**
+- **0 wrong numbers, 0 false ACCEPTs.**
+- **"Long trip" chip** (r7, r9; short pickup, long trip): legs read in the right order on all 4 scans. The verdict was MARGINAL, the true verdict. Under the attempt-1 rules, the "Long trip" line would have swapped them.
+- **Connector glyph next to the first leg** (r8, r9: bar and dot): read correctly. On these scans OCR gave the legs in screen order, so the reorder step had nothing to move. It is proven by Node tests only, not yet by a real out-of-order scan.
+- **Tight glyph** (r10, r11): OCR ate the leading number of a leg.
+  - Before the leg fix, r10-dark showed a **wrong pickup** (41 min / 21.3 mi, really the trip; the verdict was CAN'T TELL).
+  - After the fix, all 4 scans refuse the legs. r10-light read its legs and lost the fare.
+- **Manual entry on readable scans: 6 of 22 (27%)**:
+  - 4 are r10/r11, the deliberately hostile tight glyph;
+  - 2 are "£24.6¢" / "£41.2¢", where OCR merged the last digit with the surge icon. These are refused under the F3 rule; before it, they were "repaired".
+  - Without r10/r11 it is 2 of 18 (11%).
+- x1 (an uncaptioned £45.00 as big as the fare) is refused in both modes.
+
+## Assumptions added
+
+1. On a real card a ride-type word for a leg (pickup/trip/away) sits on the leg's own line. Real UK cards (pilot-0001) show none, so legs are read top to bottom.
+2. Real cards always show 2 decimal places.
+3. Tesseract's `data.text` lines equal its `data.lines[].text` up to whitespace. If not, bare legs go to manual entry (safe, but it would raise the manual rate; measured 0 such refusals on 24 scans).
+
+## Still open
+- The owner's risk (fare lost, lone uncaptioned amount: QA x06/x11) is unchanged and is not closed.
+- Upward OCR digit misreads of the fare (QA F4) cannot be seen by any text rule.
+- Only one real card backs any of this.

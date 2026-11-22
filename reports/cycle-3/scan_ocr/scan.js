@@ -1,7 +1,7 @@
 // Scan images through the app's #scan-file and print verdict + readout. Usage: node scan.js out.json img1 img2 ...
 const { chromium } = require("playwright");
 const fs = require("fs");
-const BASE = "http://localhost:8794/";
+const BASE = "http://localhost:8798/";
 (async () => {
   const [out, ...files] = process.argv.slice(2);
   const b = await chromium.launch();

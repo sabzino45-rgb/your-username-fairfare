@@ -1,0 +1,223 @@
+{
+  "pilot": {
+    "n_cases": 0,
+    "scan_accuracy": {},
+    "scan_accuracy_overall": null,
+    "manual_fallback_rate": null,
+    "verdict_n_scored": 0,
+    "verdict_median_error": null,
+    "verdict_p90_error": null,
+    "range_coverage": null,
+    "wrong_number_count": 0,
+    "false_accept_count": 0,
+    "readable_n": 0,
+    "readable_manual_rate": null,
+    "cases": []
+  },
+  "synthetic": {
+    "n_cases": 17,
+    "scan_accuracy": {
+      "fare": 0.6471,
+      "pickup_min": 0.5882,
+      "pickup_miles": 0.5882,
+      "trip_min": 0.5882,
+      "trip_miles": 0.5882
+    },
+    "scan_accuracy_overall": 0.6,
+    "manual_fallback_rate": 0.0,
+    "verdict_n_scored": 0,
+    "verdict_median_error": null,
+    "verdict_p90_error": null,
+    "range_coverage": null,
+    "wrong_number_count": 13,
+    "false_accept_count": 13,
+    "readable_n": 11,
+    "readable_manual_rate": 0.0,
+    "cases": [
+      {
+        "id": "syn-rl2-001",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-002",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-003",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-004",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-005",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-006",
+        "decision": "MARGINAL",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-007",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-008",
+        "decision": "ACCEPT",
+        "confidence": "low",
+        "missing": [],
+        "wrong_fields": [
+          "pickup_min",
+          "pickup_miles",
+          "trip_min",
+          "trip_miles"
+        ],
+        "true_decision": "MARGINAL"
+      },
+      {
+        "id": "syn-rl2-009",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-rl2-010",
+        "decision": "ACCEPT",
+        "confidence": "high",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      },
+      {
+        "id": "syn-rl2-011",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-012",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-013",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-014",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-015",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-016",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [
+          "fare"
+        ],
+        "true_decision": "UNKNOWN"
+      },
+      {
+        "id": "syn-rl2-017",
+        "decision": "ACCEPT",
+        "confidence": "medium",
+        "missing": [],
+        "wrong_fields": [],
+        "true_decision": "ACCEPT"
+      }
+    ]
+  },
+  "judged_on": "synthetic"
+}

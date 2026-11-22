@@ -44,3 +44,41 @@ def test_readable_manual_rate_is_none_without_readable_cases():
     r = evaluate([CASES[3]])
     assert r["readable_n"] == 0 and r["readable_manual_rate"] is None
     assert r["wrong_number_count"] == 0 and r["false_accept_count"] == 0
+
+
+def test_false_accept_is_judged_with_the_app_defaults_too():
+    """QA cycle 3 F6: the app's default £/mile floor (0.9) is lower than verdict.py's (1.00). A wrong fare that gives
+    ACCEPT only at the app's defaults must still count as a false ACCEPT."""
+    from fairfare import DriverProfile, Offer, estimate
+    from tools.run_eval import APP_DEFAULTS
+    legs = dict(pickup_min=5, pickup_miles=2.0, trip_min=15, trip_miles=6.0)
+    app, py = DriverProfile(**APP_DEFAULTS), DriverProfile()
+    dec = lambda fare, p: estimate(Offer(fare=fare, **legs), p).decision  # noqa: E731
+    pairs = [(t / 20, r / 20) for t in range(100, 600) for r in range(t + 1, t + 40)
+             if dec(r / 20, app) == "ACCEPT" and dec(r / 20, py) != "ACCEPT" and dec(t / 20, app) != "ACCEPT"]
+    assert pairs, "no fare pair separates the two profiles"
+    true_fare, read_fare = pairs[0]
+    c = {"id": "app_only", "origin": "synthetic", "profile": {"cost_per_mile": 0.2},
+         "ocr_text": f"UberX\n£{read_fare:.2f}\n5 mins (2.0 mi) away\n15 mins (6.0 mi) trip",
+         "expected_fields": {"fare": true_fare, **legs}}
+    assert evaluate([c])["false_accept_count"] == 1
+
+
+def test_app_defaults_match_engine_js():
+    import json
+    import re
+    import shutil
+    import subprocess
+    import pytest
+    from tools.run_eval import APP_DEFAULTS
+    if shutil.which("node") is None:
+        pytest.skip("node not installed")
+    engine = "file://" + os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "js", "engine.js"))
+    r = subprocess.run(["node", "--input-type=module", "-e",
+                        f"import {{ DEFAULT_SETTINGS as d }} from '{engine}'; console.log(JSON.stringify(d))"],
+                       capture_output=True, text=True, check=True)
+    d = json.loads(r.stdout)
+    assert (d["targetHr"], d["minMile"], d["costMile"], d["commission"] / 100) == (
+        APP_DEFAULTS["target_per_hour"], APP_DEFAULTS["target_per_mile"], APP_DEFAULTS["cost_per_mile"],
+        APP_DEFAULTS["service_fee_share"])
+    assert re.match(r"^(both)$", d["optimise"])

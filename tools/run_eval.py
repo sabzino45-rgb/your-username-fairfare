@@ -7,7 +7,8 @@ Reports:
   - wrong_number_count: cases where the parser gave a value for a required field and it is wrong
     (a refusal, None, never counts)
   - false_accept_count: cases where the parsed verdict is ACCEPT but the verdict for the true
-    numbers is not ACCEPT (an expected null field makes the true verdict UNKNOWN)
+    numbers is not ACCEPT (an expected null field makes the true verdict UNKNOWN), under verdict.py's
+    DriverProfile defaults or the app's defaults (APP_DEFAULTS), whichever catches it
   - readable_manual_rate / readable_n: among cases whose 5 required fields are all on the card,
     the share sent to manual entry
 Real (pilot) and synthetic cases are reported separately; goals are judged on
@@ -34,6 +35,11 @@ from fairfare import DriverProfile, estimate, parse_offer_text  # noqa: E402
 from fairfare.parser import REQUIRED, Offer  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
+# The app's default targets (app/js/engine.js DEFAULT_SETTINGS: targetHr 18, minMile 0.9, costMile 0.2, commission 0;
+# tests/test_eval_metrics.py checks they match). verdict.py's DriverProfile defaults to £1.00/mile, stricter than the
+# app, so a false ACCEPT is judged with the app's defaults as well (QA cycle 3 F6): a case counts if the parsed verdict
+# is ACCEPT and the true verdict is not, under EITHER profile. The case's own "profile" overrides both.
+APP_DEFAULTS = {"target_per_hour": 18.0, "target_per_mile": 0.9, "cost_per_mile": 0.2, "service_fee_share": 0.0}
 TOLERANCE = {"fare": 0.01, "pickup_min": 1.0, "pickup_miles": 0.15, "trip_min": 1.0, "trip_miles": 0.15}
 
 
@@ -81,8 +87,13 @@ def evaluate(cases: list[dict]) -> dict:
             readable_manual += bool(offer.missing)
         profile = DriverProfile(**c.get("profile", {}))
         v = estimate(offer, profile)
-        true_v = estimate(Offer(**{f: want.get(f) for f in REQUIRED}), profile)
-        false_accepts += v.decision == "ACCEPT" and true_v.decision != "ACCEPT"
+        true_offer = Offer(**{f: want.get(f) for f in REQUIRED})
+        true_v = estimate(true_offer, profile)
+        app_profile = DriverProfile(**{**APP_DEFAULTS, **c.get("profile", {})})
+        fa_py = v.decision == "ACCEPT" and true_v.decision != "ACCEPT"
+        fa_app = (estimate(offer, app_profile).decision == "ACCEPT"
+                  and estimate(true_offer, app_profile).decision != "ACCEPT")
+        false_accepts += fa_py or fa_app
         out = c.get("outcome")
         row = {"id": c["id"], "decision": v.decision, "confidence": v.confidence, "missing": offer.missing,
                "wrong_fields": wrong_fields, "true_decision": true_v.decision}

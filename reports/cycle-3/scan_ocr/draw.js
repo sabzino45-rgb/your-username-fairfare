@@ -8,6 +8,11 @@ const CARDS = {
   r4: { label: "UberXL", fare: "£9.85", rating: "4.79", sub: "£0.95 est. holiday entitlement included", l1: "3 min (0.9 mi)", a1: "Sample St, Testbury", l2: "10 mins (3.2 mi)", a2: "Mockham, XY3 4ZW", btn: "Match", truth: [9.85, 3, 0.9, 10, 3.2] },
   r5: { label: "Uber Green", fare: "£18.40", rating: "4.95", sub: "£1.50 tip included", l1: "7 min (2.6 mi)", a1: "Demo Avenue, Exampleby", l2: "14 mins (5.5 mi)", a2: "Trialton, AA1 1AA", btn: "Match", truth: [18.4, 7, 2.6, 14, 5.5] },
   r6: { label: "UberX", fare: "£31.75", rating: "4.90", sub: "£3.06 est. holiday entitlement included", l1: "14 min (6.0 mi)", a1: "Model Close, Fakeley", l2: "21 mins (9.7 mi)", a2: "Pretendon, BB2 2BB", btn: "Match", truth: [31.75, 14, 6.0, 21, 9.7] },
+  r7: { label: "UberX", fare: "£24.10", rating: "4.96", sub: "£2.33 est. holiday entitlement included", chip: "Long trip", l1: "3 min (0.7 mi)", a1: "Example Road, Sampleton", l2: "35 mins (17.9 mi)", a2: "Farford, CC3 3CC", btn: "Match", truth: [24.1, 3, 0.7, 35, 17.9] },
+  r8: { label: "Comfort", fare: "£27.55", rating: "4.85", sub: "£2.66 est. holiday entitlement included", glyph: true, l1: "12 min (5.4 mi)", a1: "Mock Lane, Demoville", l2: "1 hr 4 mins (39.5 mi)", a2: "Distant, DD4 4DD", btn: "Match", truth: [27.55, 12, 5.4, 64, 39.5] },
+  r9: { label: "UberX", fare: "£22.90", rating: "4.91", sub: "£1.50 tip included", chip: "Long trip", glyph: true, l1: "2 min (0.5 mi)", a1: "Sample St, Testbury", l2: "32 mins (16.8 mi)", a2: "Yonder, EE5 5EE", btn: "Match", truth: [22.9, 2, 0.5, 32, 16.8] },
+  r10: { label: "UberX", fare: "£19.40", rating: "4.90", sub: "£1.87 est. holiday entitlement included", glyph: "tight", l1: "4 min (1.1 mi)", a1: "Model Close, Fakeley", l2: "41 mins (21.3 mi)", a2: "Pretendon, BB2 2BB", btn: "Match", truth: [19.4, 4, 1.1, 41, 21.3] },
+  r11: { label: "Comfort", fare: "£16.75", rating: "4.88", sub: "£1.62 est. holiday entitlement included", glyph: "tight", l1: "1 hr 4 mins (39.5 mi)", a1: "Mock Lane, Demoville", l2: "12 mins (5.4 mi)", a2: "Distant, DD4 4DD", btn: "Match", truth: [16.75, 64, 39.5, 12, 5.4] },
   // adversarial: an uncaptioned amount as big as the fare inside the card -> must not ACCEPT on a wrong number
   x1: { label: "UberX", fare: "£12.10", extraBig: "£45.00", rating: "4.91", sub: "£1.17 est. holiday entitlement included", l1: "6 min (2.0 mi)", a1: "Example Road, Sampleton", l2: "15 mins (5.9 mi)", a2: "Testford, AB1 2CD", btn: "Match", truth: [null, 6, 2.0, 15, 5.9] },
 };
@@ -27,8 +32,11 @@ function html(c, dark) {
    ${c.extraBig ? big(c.extraBig) : ""}
    <div style="margin:6px 0"><span style="background:${chip};border-radius:8px;padding:4px 10px;font-size:16px">★ ${c.rating}</span> <span style="background:${chip};border-radius:8px;padding:4px 10px;font-size:16px">After fees</span></div>
    <div style="margin:10px 0"><span style="background:${chip};border-radius:8px;padding:4px 8px;font-size:15.5px;color:${sub}">${esc(c.sub)}</span></div>
+   ${c.chip ? `<div style="margin:8px 0"><span style="background:${chip};border-radius:8px;padding:4px 10px;font-size:15px;font-weight:600">${esc(c.chip)}</span></div>` : ""}
    <hr style="border:0;border-top:1px solid ${dark ? "#444" : "#ddd"}">
-   <div style="padding-left:22px;font-size:17px;line-height:1.35;border-left:2px solid ${fg};margin-left:6px">
+   ${c.glyph ? `<div style="font-size:17px;line-height:1.35;position:relative;padding-left:${c.glyph === "tight" ? 7 : 14}px"><div style="position:absolute;left:2px;top:6px;bottom:30px;width:${c.glyph === "tight" ? 4 : 3}px;background:${fg}"></div><div style="position:absolute;left:-2px;top:4px;width:10px;height:10px;border-radius:50%;background:${fg}"></div>
+    <div style="font-weight:600">${esc(c.l1)}</div><div>${esc(c.a1)}</div><div style="font-weight:600">${esc(c.l2)}</div><div>${esc(c.a2)}</div></div>` : ""}
+   <div style="display:${c.glyph ? "none" : "block"};padding-left:22px;font-size:17px;line-height:1.35;border-left:2px solid ${fg};margin-left:6px">
     <div style="font-weight:600">${esc(c.l1)}</div><div>${esc(c.a1)}</div><div style="font-weight:600">${esc(c.l2)}</div><div>${esc(c.a2)}</div></div>
    <hr style="border:0;border-top:1px solid ${dark ? "#444" : "#ddd"}">
    <div style="background:${btnbg};color:${btnfg};border-radius:8px;text-align:center;font-size:20px;font-weight:700;padding:14px">${esc(c.btn)}</div>
@@ -38,7 +46,7 @@ function html(c, dark) {
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 })).newPage();
   const fs = require("fs"); const truth = {};
-  for (const [id, c] of Object.entries(CARDS)) for (const dark of [false, true]) {
+  for (const [id, c] of Object.entries(CARDS).filter(([k]) => !process.env.PICK || process.env.PICK.split(',').includes(k))) for (const dark of [false, true]) {
     await p.setContent(html(c, dark));
     const f = `${OUT}/${id}-${dark ? "dark" : "light"}.png`;
     await p.screenshot({ path: f }); truth[f.split("/").pop()] = c.truth;

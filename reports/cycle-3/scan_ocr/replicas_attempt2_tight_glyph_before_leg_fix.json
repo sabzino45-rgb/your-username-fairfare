@@ -1,0 +1,91 @@
+{
+ "rows": [
+  {
+   "file": "r10-dark.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown \u00a319.40 \u00b7 Pickup minutes 41 \u00b7 Pickup miles 21.3 \u00b7 Trip minutes: not found \u00b7 Trip miles: not found",
+   "parsed": {
+    "f": [
+     19.4,
+     41,
+     21.3,
+     null,
+     null
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@\u00ae UberX\n\n\u00a319.40 -\n\n* 490 After fees\n\u00a31.87 est. holiday entitlement included\n\nmin (1.1 mi)\n\n[reco Close, Fakeley\n41 mins (21.3 mi)\nPretendon, BB2 2BB\n\nMatch\n\n"
+  },
+  {
+   "file": "r10-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found \u00b7 Pickup minutes 4 \u00b7 Pickup miles 1.1 \u00b7 Trip minutes 41 \u00b7 Trip miles 21.3",
+   "parsed": {
+    "f": [
+     null,
+     4,
+     1.1,
+     41,
+     21.3
+    ],
+    "w": [
+     "fare_unreadable",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n\u00ae UberX\n\n\u00a319.4\u00a2\n\n* 4.90\n\nAfter fees\n\n\u00a31.87 est. holiday entitlement included\n\n4 min (1.1 mi)\n\nModel Close, Fakeley\n\n|\n\n41 mins (21.3 mi)\n\nPretendon, BB2 2BB\n\nMatch\n"
+  },
+  {
+   "file": "r11-dark.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown \u00a316.75 \u00b7 Pickup minutes: not found \u00b7 Pickup miles: not found \u00b7 Trip minutes 12 \u00b7 Trip miles 5.4",
+   "parsed": {
+    "f": [
+     16.75,
+     null,
+     null,
+     12,
+     5.4
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "pickup_speed_implausible",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@\u00ae Comfort\n\n\u00a316.75\n\n* 4.88\n\nAfter fees\n\n\u00a31.62 est. holiday entitlement included\n\nhr 4 mins (39.5 mi)\n\nM\n\nock Lane, Demoville\n\n|\n\n12 mins (5.4 mi)\n\nDistant, DD4 4DD\n\nMatch\n"
+  },
+  {
+   "file": "r11-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown \u00a316.75 \u00b7 Pickup minutes: not found \u00b7 Pickup miles: not found \u00b7 Trip minutes 12 \u00b7 Trip miles 5.4",
+   "parsed": {
+    "f": [
+     16.75,
+     null,
+     null,
+     12,
+     5.4
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "pickup_speed_implausible",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@\u00ae Comfort\n\n\u00a316.75\n\n* 4.88\n\nAfter fees\n\n\u00a31.62 est. holiday entitlement included\n\nhr 4 mins (39.5 mi)\n\nM\n\nock Lane, Demoville\n\n|\n\n12 mins (5.4 mi)\n\nDistant, DD4 4DD\n\nMatch\n"
+  }
+ ],
+ "errs": []
+}

@@ -69,6 +69,9 @@ function garbledFareLine(line) {
   const g = GARBLED_FARE_LINE.exec(line);
   return !!g && (g[1] !== undefined || f(ocrDigits(g[2])) > 5);
 }
+// Attempt 2: pence lost or garbled ("£33.°", "£16.4:", "£21.3", "£18.,"); see parser.py.
+const PARTIAL_TAIL = /[.,:;°]/y;
+const partialPence = (m, text, end) => /[.,][0-9OoIl]$/.test(m[1]) || !!matchAt(PARTIAL_TAIL, text, end);
 // Lines whose min/distance pair is navigation, not an offer leg.
 const NOT_LEG = /\b(?:arriv\w*|eta|remaining|destination|route|to go)\b/i;
 // The fare sits on the card just above the legs: at most this many NON-BLANK lines above the first leg.
@@ -82,6 +85,9 @@ const LEG_SRC = "(?:([0-9]+)[ \\t]*(?:hours?|hrs?|h)(?![A-Za-z])[ \\t]*(?:([0-9]
   NUM + "[ \\t]*(?:mins?|minutes?))" +
   "[ \\t]*[(\\[·•,-]?[ \\t]*" + NUM + "[ \\t]*(mi|miles?|km)\\b\\)?[ \\t]*(away|trip|pickup)?";
 const RATING = new RegExp(NUM + "\\s*[★*]");
+// Attempt 2: garbled leg lines (a connector glyph ate the leading number); see parser.py.
+const DIST_TOKEN = /(?<![A-Za-z0-9.,\/])[0-9]+(?:[.,][0-9]+)?[ \t]*(?:mi|miles?|km)\b/i;
+const HOUR_BEFORE = /(?:^|[^A-Za-z])(?:hours?|hrs?|h)[ \t]*$/i;
 // Cycle 2 fare zone. Ride-type names and badges that make up a product-label line ("UberX",
 // "Comfort Electric", "UberX · Exclusive"). A guess at real layouts; the one shared list.
 // Attempt 2: "Uber" may stand before any name ("Uber X", "Uber-X", "Uber Comfort"); "Uber" or "X" alone count too.
@@ -195,7 +201,7 @@ function makeLines(text) {
     if (j < nonblank.length) out.push(line(nonblank[j]));
     return out;
   };
-  return { starts, no, line, nb, nonblank, neighbours };
+  return { starts, no, line, nb, nonblank, neighbours, partial: new Set() };
 }
 
 function plausible(value, legs) {
@@ -242,6 +248,7 @@ function fareFromZone(o, L, fares, label, anchorLine, first, last) {
   const below = fares.filter((c) => c[0] > last && L.no(c[0]) < cardEnd);
   let garbled = false;
   for (let n = label + 1; n < anchorLine; n++) if (garbledFareLine(L.line(n))) garbled = true;
+  for (const n of L.partial) if (label <= n && n < anchorLine) garbled = true;
   const values = new Set([...zone.map((c) => c[2]), ...accept.map((c) => c[2])]);
   let labelBelow = false;
   for (let n = lastLine + 1; n < cardEnd; n++) if (productLabelLine(L.line(n))) labelBelow = true;
@@ -274,7 +281,7 @@ function fareBelowCut(o, L, allFares, used, first, anchorLine, cut) {
   const after = near.length ? near[near.length - 1][0] : -1;
   let garbled = false;
   for (let n = cut + 1; n < anchorLine; n++)
-    if (L.starts[n] > after && anchorNb - L.nb[n] <= FARE_WINDOW_LINES && garbledFareLine(L.line(n))) garbled = true;
+    if (L.starts[n] > after && anchorNb - L.nb[n] <= FARE_WINDOW_LINES && (garbledFareLine(L.line(n)) || L.partial.has(n))) garbled = true;
   if (onAccept.size) {
     // The amount on the Accept button is the card's own fare; a different fare above the legs too: refuse.
     const v = [...onAccept][0];
@@ -307,17 +314,25 @@ export function parseOfferText(text) {
 
   const legs = []; // [label, minutes, miles, position]
   const legRe = new RegExp(LEG_SRC, "gi");
+  const garbledLegs = new Set(); // line numbers of garbled leg lines
   let m;
   while ((m = legRe.exec(text))) {
     if (NOT_LEG.test(L.line(L.no(m.index)))) continue; // navigation bar, not an offer leg
+    if (HOUR_BEFORE.test(text.slice(L.starts[L.no(m.index)], m.index))) { garbledLegs.add(L.no(m.index)); continue; }
     const minutes = m[1] !== undefined ? parseInt(m[1], 10) * 60 + (m[2] !== undefined ? parseInt(m[2], 10) : 0) : f(m[3]);
     let label = (m[6] || "").toLowerCase();
-    const before = text.slice(Math.max(0, m.index - 12), m.index).toLowerCase();
+    // Attempt 2: only on the leg's own line ("Long trip" on the line above is not this leg's label).
+    const before = text.slice(Math.max(L.starts[L.no(m.index)], m.index - 12), m.index).toLowerCase();
     if (!label) label = before.includes("pickup") ? "pickup" : before.includes("trip") ? "trip" : "";
     const d = f(m[4]);
     legs.push([label, minutes, m[5].toLowerCase().startsWith("km") ? d / KM_PER_MILE : d, m.index]);
   }
 
+  const legLines = new Set(legs.map((l) => L.no(l[3])));
+  for (let n = 0; n < L.starts.length; n++) {
+    const ln = L.line(n);
+    if (!legLines.has(n) && !ln.includes("£") && DIST_TOKEN.test(ln) && !NOT_LEG.test(ln)) garbledLegs.add(n);
+  }
   const pickups = legs.filter((l) => l[0] === "away" || l[0] === "pickup");
   const trips = legs.filter((l) => l[0] === "trip");
   let unl = legs.filter((l) => l[0] === "");
@@ -358,6 +373,7 @@ export function parseOfferText(text) {
     if (NOT_FARE.test(line) || !FARE_PREFIX_OK.test(prefix) || prefix.trimEnd().endsWith("+")) continue;
     let end = m.index + m[0].length;
     if (matchAt(RATE_AFTER, text, end)) continue;
+    if (partialPence(m, text, end)) { L.partial.add(n); continue; } // attempt 2: "£33.°", "£16.4:" never repaired
     let value = f(ocrDigits(m[1]));
     const rng = matchAt(RANGE_AFTER, text, end);
     if (rng) { value = Math.min(value, f(rng[1])); end = rng.index + rng[0].length; } // lower, guaranteed end
@@ -394,6 +410,7 @@ export function parseOfferText(text) {
 
   let pickup = pickups[0] || null;
   let trip = trips[0] || null;
+  if (unl.length && garbledLegs.size) { o.warnings.push("leg_unreadable"); unl = []; } // attempt 2
   if (!pickup && unl.length) { pickup = unl.shift(); o.warnings.push("pickup_inferred_from_order"); }
   if (!trip && unl.length) { trip = unl.shift(); o.warnings.push("trip_inferred_from_order"); }
   if (pickup) { o.pickup_min = pickup[1]; o.pickup_miles = r2(pickup[2]); }
@@ -615,6 +632,46 @@ export function reconcileScanFare(offer, geoFare, text) {
     o.missing = REQUIRED.filter((x) => o[x] === null);
     if (!o.warnings.includes("needs_manual_entry")) o.warnings.push("needs_manual_entry");
   }
+  return o;
+}
+
+// Attempt 2 (QA cycle 3 F2): OCR may emit the card's lines out of screen order (a connector glyph glued to the first
+// leg sent it to the end of the text), and bare legs are read top to bottom. On a screenshot the leg lines are put
+// back in screen order using the OCR line boxes. Pure function, no DOM.
+// text: the OCR text; lines: [{text, y}] from the OCR (y = the line box's top, any scale).
+// Returns { text, ok }: text with the leg lines in top-to-bottom order (other lines untouched), and ok = false when a
+// leg line could not be found among the OCR lines, so its screen position is unknown.
+const normLine = (s) => unicodeDigits(String(s || "")).replace(/\s+/g, " ").trim();
+export function orderLegsByPosition(text, lines) {
+  text = String(text || "");
+  const rows = text.split("\n");
+  const legRe = new RegExp(LEG_SRC, "i");
+  const legIdx = [];
+  rows.forEach((r, i) => { const u = unicodeDigits(r); if (legRe.test(u) && !NOT_LEG.test(u)) legIdx.push(i); });
+  if (legIdx.length < 2) return { text, ok: true };
+  if (!Array.isArray(lines)) return { text, ok: false };
+  const used = new Set(), ys = [];
+  for (const i of legIdx) {
+    const want = normLine(rows[i]);
+    const k = lines.findIndex((l, j) => !used.has(j) && l && typeof l.y === "number" && Number.isFinite(l.y) && normLine(l.text) === want);
+    if (k < 0) return { text, ok: false };
+    used.add(k);
+    ys.push(lines[k].y);
+  }
+  const order = legIdx.map((i, j) => [ys[j], j]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, j]) => rows[legIdx[j]]);
+  const out = rows.slice();
+  legIdx.forEach((i, j) => { out[i] = order[j]; });
+  return { text: out.join("\n"), ok: true };
+}
+
+// Screenshots: when the legs are bare (order inferred) and their screen order could not be confirmed, the legs go
+// to manual entry rather than risk a swapped pickup and trip (a swap can turn MARGINAL into ACCEPT).
+export function reconcileLegOrder(offer, ok) {
+  if (ok !== false || !offer.warnings.some((w) => w.endsWith("_inferred_from_order"))) return offer;
+  const o = { ...offer, warnings: [...offer.warnings, "leg_order_unconfirmed"] };
+  o.pickup_min = o.pickup_miles = o.trip_min = o.trip_miles = null;
+  o.missing = REQUIRED.filter((x) => o[x] === null);
+  if (!o.warnings.includes("needs_manual_entry")) o.warnings.push("needs_manual_entry");
   return o;
 }
 
