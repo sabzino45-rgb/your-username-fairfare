@@ -1,0 +1,1 @@
+{"metric": "scan_accuracy_overall", "op": ">=", "value": 1.0}

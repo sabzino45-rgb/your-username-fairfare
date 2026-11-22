@@ -1,6 +1,114 @@
 # Spec
 
-_Owned by product-spec. Rewritten each cycle. Newest cycle first; cycle 1 and v0 are kept below for history._
+_Owned by product-spec. Rewritten each cycle. Newest cycle first; cycle 2, cycle 1 and v0 are kept below for history._
+
+# Cycle 3
+
+## Goal for cycle 3 (v1.2): read the real Uber UK offer card
+
+**Why this cycle:** cycle 2's reader passed every review, but the owner did NOT accept the remaining risk (OCR loses the fare while an equally big amount sits inside the card, giving a false ACCEPT), so it cannot ship (decisions.md, "Owner decisions on cycle 2"). The owner then sent FairFare's first real offer card (eval_set/pilot.jsonl, pilot-0001). The app's real OCR read every number on it correctly, but the cycle-2 text rules refuse its fare: pilot `readable_manual_rate` = 1.0 and `scan_accuracy_overall` = 0.8 (reports/cycle-3/eval_before.json). The real card breaks several cycle-2 assumptions:
+
+| cycle-2 assumption | real card (pilot-0001) |
+|---|---|
+| the only £ amount in the fare zone is the fare | a second £ amount sits between the fare and the legs: "£… est. holiday entitlement included", a part of the fare, not a rival fare |
+| (none) | an "After fees" chip next to the fare: the fare is already the driver's take-home before running costs |
+| clean ride label | the label carries OCR junk ("oe UberX"), and a junk line ("BE —") sits between label and fare |
+| legs carry "away" / "trip" words | legs are bare "21 min (8.2 mi)" / "12 mins (4.6 mi)", each followed by an address line (redacted to [ADDRESS]) and a "|" connector line |
+| the button says "Accept" | the button says "Match" (OCR did not keep it in this capture) |
+| (none) | a surge icon follows the fare; map and status-bar junk sit above the card |
+
+**Scope:** the screenshot reader only: fairfare/parser.py and app/js/engine.js, kept identical (tests/test_js_parity.py), plus eval cases and tests that measure it. Owner: scan-engineer. No UI, verdict-model or app changes.
+
+**Gated metric (tools/gate.py, reports/cycle-3/goal.json):**
+
+```
+scan_accuracy_overall >= 1.0
+```
+
+judged on the **pilot** side of `python tools/run_eval.py --save reports/cycle-3/eval.json` (run_eval judges pilot whenever pilot cases exist; today that is pilot-0001 only).
+
+Why this metric: it is the one number that says "the real card's fare is read **and read right**". `readable_manual_rate <= 0` would also pass if the parser returned a wrong fare (a wrong fare is not "missing"), and `wrong_number_count <= 0` already passes today (0, the fare is refused). `scan_accuracy_overall` = 1.0 needs all 5 fields present and within tolerance. It rests on one real card, so it proves the reader handles this layout, not real cards in general (see "What cycle 3 can claim").
+
+**Acceptance criteria the Orchestrator verifies (not in gate.py; each one blocks):**
+1. Pilot side: `wrong_number_count` = 0, `false_accept_count` = 0, `readable_manual_rate` = 0.
+2. Synthetic side: `wrong_number_count` = 0 and `false_accept_count` = 0 (as in cycle 2), and `readable_manual_rate` not above cycle 2's 0.0 (reports/cycle-3/eval_before.json, 103 readable cases).
+3. `python tools/run_eval.py --baseline reports/cycle-3/eval_before.json` exits 0, and `python -m pytest -q` passes, JS parity included.
+4. No hard-coding: neither engine contains any string or number specific to pilot-0001 (e.g. "30.27", "2.92", "8.2", "BE —", "oe UberX", "on Aboot", "A380"). The scan-engineer adds a test that reads at least 3 re-valued variants of pilot-0001 (different fare, sub-amount, legs, labels, junk lines) correctly; caption vocabulary (R1) is a general list, not this card's line.
+
+## Requirements (cycle 3, priority order)
+
+### R1. Read real Uber UK card layouts (owner: scan-engineer)
+
+General rules, in fairfare/parser.py and app/js/engine.js together. Every rule must keep the cycle-2 protections: amounts above the label or outside the card are never fares; two rival fares give None; a garbled fare gives None; the height check stays.
+
+1. **Sub-amount lines describe the fare, they don't rival it.** A £ amount on a line whose caption says it is a part of, or a note on, the fare (one shared caption list, e.g. "included", "incl.", "est.", "estimated", "entitlement", "holiday", "after fees", "tip", "tips", "fee(s)", "toll(s)", "surcharge", "Clean Air Zone", "boost", "surge") is a **sub-amount**. Sub-amounts never count as a second fare (no `fare_ambiguous`) **and are never a fare candidate themselves**: if the fare line is lost and only a captioned sub-amount remains, the answer is None (`fare_missing`). A sub-amount must be smaller than the fare it sits with; if it is not, give None. This rule must not widen the owner's unaccepted risk: an uncaptioned second amount in the zone still gives `fare_ambiguous`, as in cycle 2.
+2. **"After fees" chip.** A chip such as "After fees" next to or below the fare (with or without an OCR-junk icon and a number, like "% 5.00 After fees") marks the fare as take-home before running costs. It is not a fare and not a rival. The parser does not invent a surge value from it unless the line is clearly a surge line under the existing surge rule. Record a flag (e.g. `fare_after_fees`) in warnings or a field for later; the verdict model is unchanged this cycle.
+3. **"Match" counts like "Accept".** One shared list of button words (Accept, Match, and any others the scan-engineer can justify) wherever the cycle-2 rules use the Accept line.
+4. **Label OCR junk.** A product-label line still counts as the anchor if, besides ride-type names, it holds only short OCR junk tokens (at most 2 characters each, at most 2 tokens, e.g. a mis-read icon). Ordinary words still disqualify it. Add ride-type combinations seen in real pay data ("UberX Priority") to the shared list. Short junk lines between the label and the fare (no digits, no £, at most ~4 characters of letters and punctuation) don't break the fare zone.
+5. **Bare legs followed by address lines.** Two bare leg lines ("21 min (8.2 mi)", "12 mins (4.6 mi)") with no away/trip words are pickup then trip, in screen order, when each is followed by an address line (an [ADDRESS] token, or a line of words with no £ and no leg pattern) and/or a connector line ("|", "·", "•"). Address and connector lines between legs don't break leg pairing. More than two bare legs, or one, stays a refusal for the missing leg.
+6. **Surge icon after the fare.** An OCR-junk icon token on or after the fare line (e.g. "⚡", "%", "4") does not make the fare line unreadable, as long as the amount itself is a clean "£d+.dd".
+7. **Fare plausibility bounds checked against real pay.** The owner's real completed trips (research/real_pay_2026-11.md) pay roughly **£1.5-£10 per trip mile** (short minimum-fare trips are the high end), trips of about 1-24 miles. The current bounds (fare between £0.25 per total mile and £20 + £6/mile + £1/minute over pickup plus trip) would accept all of them; the scan-engineer adds a test with real-pay-shaped values (aggregate ranges only, no row-by-row copy) proving that no fare in that range, with or without a pickup leg, is refused as `fare_implausible`, and loosens the bounds only if that test fails.
+
+Acceptance criteria:
+1. pilot-0001 reads all 5 fields (the gated goal) and the Orchestrator criteria above hold.
+2. Text-level tests cover each of rules 1-7, including the safety cases: fare line lost with only a captioned sub-amount present gives fare None; fare line lost with an uncaptioned equal-size amount in the zone gives None (as cycle 2); a sub-amount larger than the fare gives None.
+3. reports/cycle-3/scan.md lists every rule, every new assumption about real layouts, before/after numbers on both sides, and says plainly that only one real card backs them.
+
+### R2. Real-layout regression cases (owner: scan-engineer)
+
+Add `eval_set/synthetic_real_layout.jsonl` (origin "synthetic"): at least 20 cards modelled on pilot-0001's **structure** (status-bar and map junk above, junk-carrying label, fare, surge icon, "After fees" chip, captioned sub-amounts, bare legs with address and connector lines, Match/Accept button) with varied values, ride types, captions (holiday entitlement, tip, tolls, Clean Air Zone, fee included), banners, km legs, and at least 5 adversarial cards: fare lost with a captioned sub-amount left; fare lost with an uncaptioned amount in the zone; sub-amount bigger than the fare; two bare legs plus a third leg-like line; "Match" with a different amount. Save `reports/cycle-3/eval_real_layout_before.json` under the cycle-2 rules first: it must show readable cards refused (otherwise the cases don't test the change). After the fix: 0 wrong numbers, 0 false ACCEPTs on these cases, all readable ones read.
+
+These cases are synthetic and judged on the synthetic side; they guard against regressions, they don't prove real-world accuracy.
+
+## QA acceptance (cycle 3; QA can block)
+
+QA builds its own unseen replicas of the **real** card layout, from pilot-0001's structure (not from R2's file), with varied values, labels (incl. OCR-junk labels and combinations), banners, map backgrounds, sub-amount captions (incl. ones not in the parser's caption list), Match and Accept buttons, surge icons and "After fees" chips:
+- at least 25 cards, at least 18 readable (all 5 fields readable by a person);
+- at least 6 adversarial cards: fare lost or drawn thin with a captioned sub-amount, with an uncaptioned amount as big as the fare (the owner's risk), sub-amount near the fare's size, two offers;
+- at least 15 rendered as phone images (real Uber proportions: map top, white card bottom) and scanned through the app's real OCR in light and dark mode.
+
+Pass criteria:
+1. **Zero false ACCEPTs**, text level and real OCR, on every card. Any wrong number is reported with severity; one that changes the verdict word is High and blocks.
+2. **Readable cards needing manual entry <= 15%** on the real-OCR scans (and at text level). Refusing a genuinely garbled line is correct; QA reports each refusal with its cause.
+3. Python and JS identical on every card. pilot-0001 also scans correctly as a rendered replica.
+4. Existing cycle-2 QA sets (sets 4-6, hole probes) re-run: no new wrong numbers or false ACCEPTs.
+
+qa.md must say all of this is replicas, not real screenshots.
+
+## What cycle 3 can claim, and what it cannot
+
+- **Can claim:** the reader reads the one real Uber UK offer card the owner sent, and replicas of its layout, without loosening any cycle-2 protection against stray amounts, and with 0 false ACCEPTs on the cards tested.
+- **Cannot claim:** that it reads real cards in general (n = 1), or that the owner's unaccepted risk is closed. That risk (OCR loses the fare while an equally big amount sits inside the card) is about how often real OCR loses a real fare and what else real cards show. Replicas cannot measure that; only real cards can.
+- **How the risk can be closed:** the owner sends at least 10 more real, redacted offer screenshots (varied ride types, times, surge/no surge, light/dark, different phones), **held back from the scan-engineer**: the Orchestrator or QA adds them as pilot cases only after the parser is frozen, scans the real images with the app's real OCR, and reports wrong numbers, false ACCEPTs and manual-entry rate on them. Only 0 false ACCEPTs there, plus the owner's own decision, can move the risk to accepted. Until then cycle 3 can at best end HOLD, never ship.
+
+## Out of scope (cycle 3)
+
+- Any UI, verdict-model, language or app change. Using the "After fees" flag or holiday entitlement in the verdict is a later verdict-modeler question.
+- Changing how the fare is defined (gross vs after fees), pricing, backend, growth.
+- Native capture, live scan, overlays: still behind cycle 1's legal gate.
+- Fixing the pasted-text risk (owner accepted it).
+- Tuning to pilot-0001's exact text (forbidden, see criterion 4).
+
+## Safety and hands-free review (cycle 3)
+
+| Req | Rule (SAFETY.md) | How it complies |
+|---|---|---|
+| R1 sub-amounts, Match, labels, bare legs | One glanceable word and colour while moving; no numbers to read. | No UI change; the driver still sees one word. Reading the real card correctly means fewer CAN'T TELLs and fewer stops to type. Sub-amounts are never promoted to the fare, so the rule adds no new way to a false ACCEPT; when unsure the answer stays CAN'T TELL. |
+| R1 | Manual entry only when parked. | Unchanged; fewer refusals mean less parked typing. |
+| R1 "Match" button | FairFare never accepts or declines offers. | "Match" is only read as a layout landmark; FairFare never presses it or any other button. |
+| R2 cases | (none directly) | Eval data only. |
+
+No requirement changes SAFETY.md, and none needs a change to it.
+
+## Human gates triggered (cycle 3)
+
+Added to reports/cycle-3/human_gates.md (cycle 1's and cycle 2's open items still apply):
+- Owner supplies at least 10 more real, redacted offer screenshots, held back from the scan-engineer, as the only test that can close the reader risk.
+- Owner re-decides the reader risk after that held-back test; cycle 3 passing does not close it on its own.
+
+---
+
+# Cycle 2 (history)
 
 ## Goal for cycle 2 (v1.1): never take a stray amount as the fare, and stop refusing readable cards
 
