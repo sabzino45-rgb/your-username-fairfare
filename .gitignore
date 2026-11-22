@@ -8,3 +8,4 @@ reports/cycle-*/qa_probes/
 .claude/settings.local.json
 *.zip
 app/data/
+research/real_pay_*
