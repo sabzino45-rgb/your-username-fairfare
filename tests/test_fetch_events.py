@@ -32,3 +32,23 @@ def test_transform_keeps_south_west_and_estimates_finish():
 def test_bank_holidays_future_only():
     data = {"england-and-wales": {"events": [{"title": "Old", "date": "2000-01-01"}, {"title": "Christmas Day", "date": "2099-12-25"}]}}
     assert transform_bank(data) == [{"date": "2099-12-25", "title": "Christmas Day"}]
+
+
+def test_towns_parsed_from_app():
+    from tools.fetch_events import load_towns
+    towns = load_towns()
+    assert len(towns) >= 100
+    ids = [t[0] for t in towns]
+    assert "exeter" in ids and "st-marys" in ids and len(set(ids)) == len(ids)
+    for _, lat, lon in towns:
+        assert 49.8 < lat < 52.2 and -6.5 < lon < -1.5
+
+
+def test_weather_transform():
+    from tools.fetch_events import transform_weather
+    resp = [{"hourly": {"time": ["2026-11-22T18:00", "2026-11-22T19:00"],
+                        "precipitation_probability": [20, 85], "precipitation": [0.0, 1.26], "temperature_2m": [9.44, 8.6]}},
+            {"hourly": {}}]
+    out = transform_weather(["exeter", "bude"], resp)
+    assert out["start"] == "2026-11-22T18:00"
+    assert out["towns"] == {"exeter": {"p": [20, 85], "r": [0.0, 1.3], "t": [9, 9]}}

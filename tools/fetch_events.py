@@ -8,6 +8,9 @@ Sources (official, no scraping):
 Writes app/data/events.json. The app assigns each event to the nearest town and estimates
 when the crowd leaves (Ticketmaster gives start times, not finish times), and says so on screen.
 
+  - Open-Meteo weather forecast (rain and temperature, next 36 hours) for every South West town.
+    Public, no key. Fetched here, on GitHub's servers, so drivers' phones never contact it.
+
 Usage: python tools/fetch_events.py app/data/events.json
 """
 
@@ -24,6 +27,9 @@ from datetime import datetime, timedelta, timezone
 
 TM_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
 BANK_URL = "https://www.gov.uk/bank-holidays.json"
+WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
+WEATHER_HOURS = 36
+TOWNS_JS = os.path.join(os.path.dirname(__file__), "..", "app", "js", "southwest.js")
 DAYS_AHEAD = 30
 UA = {"User-Agent": "FairFare-events/1.0"}
 
@@ -153,9 +159,51 @@ def transform_bank(data: dict) -> list[dict]:
     return [{"date": e["date"], "title": e["title"]} for e in events if e.get("date", "") >= today][:8]
 
 
+def load_towns(path: str = TOWNS_JS) -> list[tuple[str, float, float]]:
+    """Town ids and coordinates, read from the app's own town list so there is one source of truth."""
+    import re
+    src = open(path, encoding="utf-8").read()
+    return [(m[0], float(m[1]), float(m[2]))
+            for m in re.findall(r'\["([a-z0-9-]+)", "[^"]+", \d, (-?\d+\.\d+), (-?\d+\.\d+),', src)]
+
+
+def transform_weather(town_ids: list[str], responses: list[dict]) -> dict:
+    """Open-Meteo multi-location responses -> compact per-town hourly arrays. Pure, tested offline."""
+    out = {"start": None, "towns": {}}
+    for tid, r in zip(town_ids, responses):
+        h = r.get("hourly") or {}
+        times = h.get("time") or []
+        if not times:
+            continue
+        out["start"] = out["start"] or times[0]
+        rnd = lambda xs, d=0: [None if x is None else round(x, d) for x in (xs or [])]
+        out["towns"][tid] = {
+            "p": rnd(h.get("precipitation_probability")),
+            "r": rnd(h.get("precipitation"), 1),
+            "t": rnd(h.get("temperature_2m")),
+        }
+    return out
+
+
+def fetch_weather(towns: list[tuple[str, float, float]], chunk: int = 40) -> dict:
+    ids, responses = [], []
+    for i in range(0, len(towns), chunk):
+        part = towns[i:i + chunk]
+        data = get_json(WEATHER_URL, {
+            "latitude": ",".join(f"{t[1]:.3f}" for t in part),
+            "longitude": ",".join(f"{t[2]:.3f}" for t in part),
+            "hourly": "precipitation_probability,precipitation,temperature_2m",
+            "forecast_hours": WEATHER_HOURS, "timezone": "Europe/London",
+        })
+        responses += data if isinstance(data, list) else [data]
+        ids += [t[0] for t in part]
+        time.sleep(0.3)
+    return transform_weather(ids, responses)
+
+
 def main(out_path: str) -> int:
     result = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "sources": [], "events": [], "bankHolidays": [], "notes": []}
+              "sources": [], "events": [], "bankHolidays": [], "weather": None, "notes": []}
     key = os.environ.get("TICKETMASTER_API_KEY", "").strip()
     if key:
         try:
@@ -171,10 +219,17 @@ def main(out_path: str) -> int:
     except Exception as e:
         result["notes"].append(f"bank_holidays_failed: {type(e).__name__}")
 
+    try:
+        result["weather"] = fetch_weather(load_towns())
+        result["sources"].append("Open-Meteo")
+    except Exception as e:
+        result["notes"].append(f"weather_failed: {type(e).__name__}")
+
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
-    print(f"events={len(result['events'])} bank_holidays={len(result['bankHolidays'])} notes={result['notes']}")
+    n_weather = len((result["weather"] or {}).get("towns", {}))
+    print(f"events={len(result['events'])} bank_holidays={len(result['bankHolidays'])} weather_towns={n_weather} notes={result['notes']}")
     return 0
 
 

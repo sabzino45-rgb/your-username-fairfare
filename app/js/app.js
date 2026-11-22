@@ -1,7 +1,8 @@
 import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromWords, reconcileScanFare, cleanPixels,
   orderLegsByPosition, reconcileLegOrder } from "./engine.js";
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
-import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd } from "./demand.js";
+import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd, hourlyOutlook, bestWindow, hotTowns, radarEvents } from "./demand.js";
+import { todayStats, pace, goalStreak, bestTime } from "./progress.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
 import * as store from "./store.js";
 
@@ -20,6 +21,7 @@ const P = {
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  rain: '<path d="M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.3"/><path d="M8 19v2M8 13v2M16 19v2M16 13v2M12 21v2M12 15v2"/>',
   pin: '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
   train: '<rect x="5" y="3" width="14" height="13" rx="3"/><path d="M5 11h14M9 20l-2 2M15 20l2 2M9 16v4M15 16v4"/>',
   plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
@@ -473,6 +475,86 @@ function eventItem(e, mins, showTown = false) {
     ${e.own ? `<button class="iconbtn" data-del-ev="${e.id}" aria-label="${esc(t("common.delete"))}">${icon("trash")}</button>` : ""}</div>`;
 }
 
+const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+const bandText = (b) => `${String(BANDS[b][0] % 24).padStart(2, "0")}–${String(BANDS[b][1] % 24).padStart(2, "0")}`;
+
+function shiftCard() {
+  const s = settings();
+  const hist = store.get("history", []);
+  const st = todayStats(hist);
+  const p = pace(st, s.shiftGoal, s.shiftHours);
+  const streak = goalStreak(hist, s.shiftGoal);
+  const best = bestTime(hist);
+  const msg = !p ? "" : p.state === "done" ? t("shift.done") : p.state === "notStarted" ? t("shift.notStarted")
+    : p.state === "onPace" ? t("shift.onPace") : t("shift.behind", { rate: money(p.need), hours: num(p.hoursLeft, 1) });
+  return `<section class="card">
+    <div class="card-head"><h2>${esc(t("shift.today"))}</h2>${streak >= 2 ? `<span class="pill" style="color:var(--accent)">${esc(t("shift.streak", { n: num(streak, 0) }))}</span>` : ""}</div>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((p ? p.pct : 0) * 100)}"><i style="width:${Math.round((p ? p.pct : 0) * 100)}%"></i></div>
+    <div class="row" style="justify-content:space-between"><b>${ltr(esc(t("shift.progress", { take: money(st.take), goal: money(s.shiftGoal, 0) })))}</b>
+      <span class="sub" data-state="${p ? p.state : ""}">${esc(msg)}</span></div>
+    ${best ? `<p class="sub">${esc(t("shift.best", { day: weekdayShort(best.day), band: "" }))}${ltr(bandText(best.band))} · ${ltr(money(best.perHr, 0) + "/h")}</p>` : ""}
+  </section>`;
+}
+
+function planCard(tw, events) {
+  const out = hourlyOutlook(tw.id, events, live.weather);
+  const best = bestWindow(out);
+  const why = best ? [
+    t("plan.why.peak"),
+    ...best.events.slice(0, 2).map((e) => t("plan.why.event", { name: e.name })),
+    ...(best.rain ? [t("plan.why.rain")] : []),
+  ] : [];
+  const wxLine = live.weather && live.weather.start ? t("plan.weatherOn", { time: live.generated ? dateTime(new Date(live.generated)) : "" }) : t("plan.weatherOff");
+  return `<section class="card">
+    <div><h2>${esc(t("plan.title"))}</h2><p class="sub">${esc(t("plan.sub", { town: tw.name }))}</p></div>
+    <p class="callout" style="margin:0">${best ? `<b>${esc(t("plan.best"))} ${ltr(`${hhmm(best.start)}–${hhmm(best.end)}`)}</b><br><span class="sub">${esc(why.join(" · "))}</span>` : esc(t("plan.quiet"))}</p>
+    <div class="strip" role="list">${out.map((h) => `<div class="hr" role="listitem" data-l="${h.level}" title="${esc(t("level." + h.level))}">
+      <span class="tm" dir="ltr">${String(h.at.getHours()).padStart(2, "0")}</span>
+      <span class="bar"></span>
+      <span class="ics">${h.events.length ? icon("ticket") : ""}${h.rain ? icon("rain") : ""}</span></div>`).join("")}</div>
+    <div class="legend"><span>${icon("ticket")}${esc(t("plan.event"))}</span><span>${icon("rain")}${esc(t("plan.rain"))}</span>
+      ${[1, 2, 3].map((l) => `<span><i style="background:var(--heat${l})"></i>${esc(t("level." + l))}</span>`).join("")}</div>
+    <p class="note">${esc(wxLine)} ${esc(t("safety.plan"))}</p>
+  </section>`;
+}
+
+let radar = { period: store.get("radarPeriod", "tonight"), bigOnly: store.get("radarBig", false), near: store.get("radarNear", false) };
+function radarCard(tw, events, now) {
+  const list = radarEvents(events, { period: radar.period, bigOnly: radar.bigOnly, nearTown: radar.near ? tw : null }, now);
+  let lastDay = "";
+  const rows = list.slice(0, 30).map((e) => {
+    const day = new Intl.DateTimeFormat(document.documentElement.lang || "en", { weekday: "long", day: "numeric", month: "short" }).format(e._end);
+    const head = day !== lastDay ? `<div class="dayhead">${esc(day)}</div>` : "";
+    lastDay = day;
+    return head + `<div class="item"><div class="body"><div class="t">${esc(e.name)}</div>
+      <div class="m">${esc(townName(e.town))}${e.venue ? " · " + esc(e.venue) : ""}${e._mi != null ? " · " + esc(t("radar.away", { mi: num(e._mi, 0) })) : ""}</div>
+      <div class="row" style="margin-top:4px"><span class="chip strong">${ltr(esc(t("radar.rush", { time: hhmm(e._end) })))}</span>
+        <span class="chip size-${e.size}">${esc(t("size." + e.size))}</span>
+        <span class="chip">${esc(e.own ? t("ev.byYou") : e.source || "")}</span>
+        ${e.url ? `<a class="help" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(t("ev.check"))}</a>` : ""}</div></div></div>`;
+  }).join("");
+  const seg = (k, v, label) => `<button data-radar="${k}" data-v="${v}" aria-pressed="${radar[k] === v}">${esc(t(label))}</button>`;
+  return `<section class="card">
+    <div><h2>${esc(t("radar.title"))}</h2><p class="sub">${esc(t("radar.sub"))}</p></div>
+    <div class="seg" role="group">${seg("period", "tonight", "radar.tonight")}${seg("period", "weekend", "radar.weekend")}${seg("period", "week", "radar.week")}</div>
+    <div class="row"><label class="check"><input type="checkbox" id="radar-big" ${radar.bigOnly ? "checked" : ""}> ${esc(t("radar.bigOnly"))}</label>
+      <label class="check"><input type="checkbox" id="radar-near" ${radar.near ? "checked" : ""}> ${esc(t("radar.near"))}</label></div>
+    <div class="list">${rows || `<p class="empty">${esc(t("radar.none"))}</p>`}</div>
+  </section>`;
+}
+
+function hotCard(events, now) {
+  const hot = hotTowns(events, now, new Date(now.getTime() + 48 * 3600e3));
+  const max = Math.max(1, ...hot.map((h) => h.score));
+  return `<section class="card">
+    <div><h2>${esc(t("hot.title"))}</h2><p class="sub">${esc(t("hot.sub"))}</p></div>
+    ${hot.length ? `<div class="bars">${hot.map((h) => `<button class="barrow" data-town="${h.town}">
+      <span class="lbl">${esc(townName(h.town))}</span><span class="track"><i style="width:${Math.round(100 * h.score / max)}%"></i></span>
+      <span class="val">${num(h.count, 0)}${h.big ? ` · ${esc(t("size.big"))} ${num(h.big, 0)}` : ""}</span></button>`).join("")}</div>`
+      : `<p class="empty">${esc(t("hot.none"))}</p>`}
+  </section>`;
+}
+
 function renderDemand() {
   const tid = town();
   const tw = TOWNS.find((x) => x.id === tid) || TOWNS[0];
@@ -480,8 +562,6 @@ function renderDemand() {
   const now = new Date();
   const grid = weekGrid(tw.id, events);
   const weekAhead = new Date(now.getTime() + 7 * 864e5);
-  const bigEvents = events.filter((e) => e.size === "big" && eventEnd(e) > now && eventEnd(e) < weekAhead)
-    .sort((a, b) => eventEnd(a) - eventEnd(b)).slice(0, 8);
   const bank = (live.bankHolidays || []).find((b) => { const d = new Date(b.date + "T12:00"); return d > new Date(now.getTime() - 864e5) && d < weekAhead; });
   const liveLine = live.sources && live.sources.includes("Ticketmaster")
     ? t("demand.liveOn", { sources: live.sources.join(", "), time: live.generated ? dateTime(new Date(live.generated)) : "" })
@@ -504,6 +584,8 @@ function renderDemand() {
         `<option value="${x.id}" ${x.id === tw.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>
     <div class="row"><button class="btn small" id="locate">${icon("pin")}${esc(t("demand.useLocation"))}</button><span class="help" id="loc-msg"></span></div>
     ${bank ? `<p class="callout">${icon("demand")} ${esc(t("bank.notice", { name: bank.title, date: dateTime(new Date(bank.date + "T00:00")).split(",").slice(0, 2).join(",") }))}</p>` : ""}
+    ${shiftCard()}
+    ${planCard(tw, events)}
     <div class="grid2">
       <section class="card">
         <span class="sub">${esc(t("demand.now"))}</span>
@@ -547,11 +629,8 @@ function renderDemand() {
         ? `<span class="toast">${icon("bell")} ${esc(t("alerts.on"))}</span>${perm === "denied" ? `<span class="help">${esc(t("alerts.blocked"))}</span>` : ""}`
         : `<button class="btn small" id="alerts-on">${icon("bell")}${esc(t("alerts.turnOn"))}</button><span class="help">${esc(t("alerts.sub"))}</span>`}</div>
     </section>
-    <section class="card">
-      <div><h2>${esc(t("demand.bigEvents"))}</h2><p class="sub">${esc(t("demand.bigEventsSub"))}</p></div>
-      <div class="list">${bigEvents.length ? bigEvents.map((e) => eventItem(e, Math.round((eventEnd(e) - now) / 60000), true)).join("")
-        : `<p class="empty">${esc(t("demand.noBig"))}</p>`}</div>
-    </section>
+    ${hotCard(events, now)}
+    ${radarCard(tw, events, now)}
     <section class="card">
       <div class="card-head"><div><h2>${esc(t("notices.title"))}</h2><p class="sub">${esc(t("notices.expires"))}</p></div>
         <button class="btn small" id="add-notice">${icon("alert")}${esc(t("notices.post"))}</button></div>
@@ -575,6 +654,10 @@ function renderDemand() {
     <p class="note">${esc(t("demand.phase2"))}</p>`;
 
   $("#town").addEventListener("change", (e) => { store.set("town", e.target.value); renderDemand(); });
+  $$("[data-radar]").forEach((b) => b.addEventListener("click", () => { radar[b.dataset.radar] = b.dataset.v; store.set("radarPeriod", radar.period); renderDemand(); }));
+  $("#radar-big").addEventListener("change", (e) => { radar.bigOnly = e.target.checked; store.set("radarBig", radar.bigOnly); renderDemand(); });
+  $("#radar-near").addEventListener("change", (e) => { radar.near = e.target.checked; store.set("radarNear", radar.near); renderDemand(); });
+  $$("[data-town]").forEach((b) => b.addEventListener("click", () => { store.set("town", b.dataset.town); renderDemand(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
   $("#locate").addEventListener("click", () => {
     const msg = $("#loc-msg");
     if (!("geolocation" in navigator)) { msg.textContent = t("demand.locFailed"); return; }
