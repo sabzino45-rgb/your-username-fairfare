@@ -3,7 +3,7 @@ import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, far
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
 import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd, hourlyOutlook, bestWindow, hotTowns, radarEvents } from "./demand.js";
 import { todayStats, pace, goalStreak, bestTime } from "./progress.js";
-import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime } from "./i18n.js";
+import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime, dateOnly } from "./i18n.js";
 import * as store from "./store.js";
 
 // ---------- icons ----------
@@ -434,13 +434,22 @@ let live = { events: [], bankHolidays: [], sources: [], generated: null };
 async function loadLive() {
   try {
     const res = await fetch("data/events.json", { cache: "no-cache" });
-    if (!res.ok) return;
+    if (!res.ok) throw new Error("no feed");
     const d = await res.json();
     live = {
       ...d,
       events: (d.events || []).map((e) => ({ ...e, town: (nearestTown(e.lat, e.lon, 15) || {}).id })).filter((e) => e.town),
     };
   } catch { /* offline or not published yet: own events still work */ }
+  try {
+    const res = await fetch("fixtures.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error("no fixtures");
+    const f = await res.json();
+    // Skip a fixture when the live feed already has an event at the same venue that day
+    const dup = (x) => live.events.some((e) => e.date === x.date && Math.abs(e.lat - x.lat) < 0.01 && Math.abs(e.lon - x.lon) < 0.01);
+    const fx = (f.fixtures || []).map((e) => ({ ...e, town: (nearestTown(e.lat, e.lon, 15) || {}).id })).filter((e) => e.town && !dup(e));
+    live = { ...live, events: [...live.events, ...fx], fixturesChecked: f.checked, fixturesCount: fx.length };
+  } catch { /* fixtures are optional */ }
 }
 const ownEvents = () => store.get("events", []).map((e) => ({ ...e, own: true }));
 const allEvents = () => [...live.events, ...ownEvents()];
@@ -467,7 +476,7 @@ function eventItem(e, mins, showTown = false) {
   return `<div class="item"><div class="body"><div class="t">${esc(e.name)}</div>
     <div class="m">${showTown ? esc(townName(e.town)) + " · " : ""}${esc(e.venue || "")} · ${ltr(esc(when))} · ${esc(t("size." + e.size))}</div>
     <div class="row" style="margin-top:4px">
-      <span class="chip">${esc(e.own ? t("ev.byYou") : e.source)}</span>
+      <span class="chip">${esc(e.own ? t("ev.byYou") : e.source === "Fixture list" ? t("ev.fixture") : e.source)}</span>${e.startConfirmed === false ? `<span class="chip">${esc(t("ev.koTbc"))}</span>` : ""}
       ${e.endEstimated ? `<span class="chip">${esc(t("ev.estimated"))}</span>` : ""}
       ${mins > 0 && mins <= 180 ? `<span class="chip">${esc(t("ev.finishesIn", { m: num(mins, 0) }))}</span>` : mins <= 0 ? `<span class="chip">${esc(t("ev.finished"))}</span>` : ""}
       ${e.url ? `<a class="help" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(t("ev.check"))}</a>` : ""}
@@ -530,13 +539,13 @@ function radarCard(tw, events, now) {
       <div class="m">${esc(townName(e.town))}${e.venue ? " · " + esc(e.venue) : ""}${e._mi != null ? " · " + esc(t("radar.away", { mi: num(e._mi, 0) })) : ""}</div>
       <div class="row" style="margin-top:4px"><span class="chip strong">${ltr(esc(t("radar.rush", { time: hhmm(e._end) })))}</span>
         <span class="chip size-${e.size}">${esc(t("size." + e.size))}</span>
-        <span class="chip">${esc(e.own ? t("ev.byYou") : e.source || "")}</span>
+        <span class="chip">${esc(e.own ? t("ev.byYou") : e.source === "Fixture list" ? t("ev.fixture") : e.source || "")}</span>
         ${e.url ? `<a class="help" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(t("ev.check"))}</a>` : ""}</div></div></div>`;
   }).join("");
   const seg = (k, v, label) => `<button data-radar="${k}" data-v="${v}" aria-pressed="${radar[k] === v}">${esc(t(label))}</button>`;
   return `<section class="card">
     <div><h2>${esc(t("radar.title"))}</h2><p class="sub">${esc(t("radar.sub"))}</p></div>
-    <div class="seg" role="group">${seg("period", "tonight", "radar.tonight")}${seg("period", "weekend", "radar.weekend")}${seg("period", "week", "radar.week")}</div>
+    <div class="seg" role="group">${seg("period", "tonight", "radar.tonight")}${seg("period", "weekend", "radar.weekend")}${seg("period", "week", "radar.week")}${seg("period", "month", "radar.month")}</div>
     <div class="row"><label class="check"><input type="checkbox" id="radar-big" ${radar.bigOnly ? "checked" : ""}> ${esc(t("radar.bigOnly"))}</label>
       <label class="check"><input type="checkbox" id="radar-near" ${radar.near ? "checked" : ""}> ${esc(t("radar.near"))}</label></div>
     <div class="list">${rows || `<p class="empty">${esc(t("radar.none"))}</p>`}</div>
@@ -566,6 +575,7 @@ function renderDemand() {
   const liveLine = live.sources && live.sources.includes("Ticketmaster")
     ? t("demand.liveOn", { sources: live.sources.join(", "), time: live.generated ? dateTime(new Date(live.generated)) : "" })
     : t("demand.liveOff");
+  const fixLine = live.fixturesChecked ? t("demand.fixtures", { date: dateOnly(live.fixturesChecked) }) : "";
   const slot = currentSlot(now);
   const lvl = slot.band >= 0 ? grid[slot.day][slot.band] : 0;
   const peak = nextPeak(grid, now);
@@ -625,6 +635,7 @@ function renderDemand() {
         return eventItem(e, mins);
       }).join("") : `<p class="empty">${esc(t("demand.noEvents", { town: tw.name }))}</p>`}</div>
       <p class="note">${esc(liveLine)}</p>
+      ${fixLine ? `<p class="note">${esc(fixLine)}</p>` : ""}
       <div class="row">${alertsOn
         ? `<span class="toast">${icon("bell")} ${esc(t("alerts.on"))}</span>${perm === "denied" ? `<span class="help">${esc(t("alerts.blocked"))}</span>` : ""}`
         : `<button class="btn small" id="alerts-on">${icon("bell")}${esc(t("alerts.turnOn"))}</button><span class="help">${esc(t("alerts.sub"))}</span>`}</div>

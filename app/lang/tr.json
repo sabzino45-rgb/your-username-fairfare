@@ -231,5 +231,9 @@
 "radar.away": "{mi} mil uzakta",
 "hot.title": "Sıcak şehirler",
 "hot.sub": "Sonraki 48 saatte en çok etkinlik talebi. Orada planlamak için şehre dokun.",
-"hot.none": "Sonraki 48 saatte henüz etkinlik yok."
+"hot.none": "Sonraki 48 saatte henüz etkinlik yok.",
+"demand.fixtures": "Büyük stadyum maçları (futbol, ragbi, Cheltenham yarışları) {date} tarihinde kontrol edildi. Tarihler TV nedeniyle değişebilir, yola çıkmadan kontrol et.",
+"ev.fixture": "Fikstür",
+"ev.koTbc": "Başlama saati kesin değil",
+"radar.month": "30 gün"
 }

@@ -231,5 +231,9 @@
 "radar.away": "{mi} mil stąd",
 "hot.title": "Gorące miasta",
 "hot.sub": "Największy popyt z wydarzeń w 48 godzin. Dotknij miasta, by tam planować.",
-"hot.none": "Brak wydarzeń w najbliższych 48 godzinach."
+"hot.none": "Brak wydarzeń w najbliższych 48 godzinach.",
+"demand.fixtures": "Mecze na dużych obiektach (piłka nożna, rugby, wyścigi w Cheltenham) sprawdzone {date}. Daty mogą się zmienić przez TV, sprawdź przed wyjazdem.",
+"ev.fixture": "Terminarz",
+"ev.koTbc": "Godzina rozpoczęcia do potwierdzenia",
+"radar.month": "30 dni"
 }

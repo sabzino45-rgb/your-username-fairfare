@@ -231,5 +231,9 @@
 "radar.away": "{mi} milje larg",
 "hot.title": "Qytete të nxehta",
 "hot.sub": "Kërkesa më e madhe nga eventet në 48 orë. Prek një qytet për të planifikuar atje.",
-"hot.none": "Ende asnjë event në 48 orët e ardhshme."
+"hot.none": "Ende asnjë event në 48 orët e ardhshme.",
+"demand.fixtures": "Ndeshjet në stadiumet e mëdha (futboll, regbi, garat e Cheltenham) të kontrolluara më {date}. Datat mund të ndryshojnë për TV, kontrollo para se të nisesh.",
+"ev.fixture": "Kalendari i ndeshjeve",
+"ev.koTbc": "Ora e fillimit e pakonfirmuar",
+"radar.month": "30 ditë"
 }

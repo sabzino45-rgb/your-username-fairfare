@@ -231,5 +231,9 @@
 "radar.away": "{mi} mîl dûr",
 "hot.title": "Bajarên germ",
 "hot.sub": "Daxwaza herî zêde ya bûyeran di 48 saetên bê de. Ji bo planê li bajarekî bitikîne.",
-"hot.none": "Hê di 48 saetên bê de tu bûyer tune."
+"hot.none": "Hê di 48 saetên bê de tu bûyer tune.",
+"demand.fixtures": "Lîstikên qadên mezin (futbol, rugby, pêşbaziyên Cheltenham) di {date} de hatin kontrolkirin. Dîrok ji ber TV dikarin biguherin, berî derketinê kontrol bike.",
+"ev.fixture": "Lîsteya lîstikan",
+"ev.koTbc": "Dema destpêkê ne diyar e",
+"radar.month": "30 roj"
 }

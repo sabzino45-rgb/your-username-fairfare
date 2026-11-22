@@ -233,5 +233,9 @@
 "radar.away": "{mi} mi away",
 "hot.title": "Hot towns",
 "hot.sub": "Most event demand in the next 48 hours. Tap a town to plan there.",
-"hot.none": "No events in the next 48 hours yet."
+"hot.none": "No events in the next 48 hours yet.",
+"demand.fixtures": "Big-venue fixtures (football, rugby, Cheltenham races) checked {date}. Dates can move for TV, so check before you set off.",
+"ev.fixture": "Fixture list",
+"ev.koTbc": "Kick-off to be confirmed",
+"radar.month": "30 days"
 }

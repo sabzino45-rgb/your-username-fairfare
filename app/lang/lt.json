@@ -231,5 +231,9 @@
 "radar.away": "už {mi} mylių",
 "hot.title": "Karšti miestai",
 "hot.sub": "Didžiausia renginių paklausa per 48 val. Bakstelėkite miestą planavimui.",
-"hot.none": "Per artimiausias 48 val. renginių dar nėra."
+"hot.none": "Per artimiausias 48 val. renginių dar nėra.",
+"demand.fixtures": "Didžiųjų arenų rungtynės (futbolas, regbis, Čeltenhamo lenktynės) patikrintos {date}. Datos gali keistis dėl TV, pasitikrinkite prieš išvykdami.",
+"ev.fixture": "Tvarkaraštis",
+"ev.koTbc": "Pradžios laikas dar nepatvirtintas",
+"radar.month": "30 dienų"
 }

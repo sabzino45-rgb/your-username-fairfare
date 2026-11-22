@@ -231,5 +231,9 @@
 "radar.away": "à {mi} miles",
 "hot.title": "Villes en vue",
 "hot.sub": "La plus forte demande d'événements sur 48 heures. Touchez une ville pour y planifier.",
-"hot.none": "Aucun événement dans les 48 prochaines heures."
+"hot.none": "Aucun événement dans les 48 prochaines heures.",
+"demand.fixtures": "Matchs des grands stades (football, rugby, courses de Cheltenham) vérifiés le {date}. Les dates peuvent changer pour la télé : vérifiez avant de partir.",
+"ev.fixture": "Calendrier",
+"ev.koTbc": "Coup d'envoi à confirmer",
+"radar.month": "30 jours"
 }

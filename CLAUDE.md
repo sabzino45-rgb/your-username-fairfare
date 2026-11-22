@@ -59,3 +59,7 @@ A phone web app, published by `.github/workflows/pages.yml` to GitHub Pages. No 
 ## The main risk
 
 Agents will happily polish a product nobody pays for. Tie each cycle's goal to a real-world metric (accuracy, retention, conversion), not to "more features". Metrics from synthetic data prove nothing about real drivers, so say so whenever a decision rests on them.
+
+## Big-venue fixtures (app/fixtures.json)
+
+A hand-checked list of home fixtures at the South West's biggest venues (football, rugby, Cheltenham races), used while there is no Ticketmaster key and alongside it after. The research agent refreshes it every 3 to 4 weeks: keep only dates on an official club or racecourse page or agreed by two sources, set `startConfirmed: false` when the kick-off isn't fixed, leave disputed dates out, and update `checked`. ops-reliability flags it as stale when `checked` is more than 30 days old or `until` has passed.

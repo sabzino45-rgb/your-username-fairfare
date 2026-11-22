@@ -231,5 +231,9 @@
 "radar.away": "{mi} mayl u jira",
 "hot.title": "Magaalooyinka kulul",
 "hot.sub": "Baahida ugu badan ee dhacdooyinka 48-ka saacadood ee xiga. Taabo magaalo si aad halkaas u qorsheyso.",
-"hot.none": "Weli dhacdo ma jirto 48-ka saacadood ee xiga."
+"hot.none": "Weli dhacdo ma jirto 48-ka saacadood ee xiga.",
+"demand.fixtures": "Ciyaaraha garoomada waaweyn (kubadda cagta, rugby, tartamada Cheltenham) waxaa la hubiyay {date}. Taariikhuhu way isbeddeli karaan TV-ga dartiis, hubi ka hor intaadan bixin.",
+"ev.fixture": "Liiska ciyaaraha",
+"ev.koTbc": "Waqtiga bilowga lama xaqiijin",
+"radar.month": "30 maalmood"
 }

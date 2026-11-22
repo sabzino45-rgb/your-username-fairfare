@@ -231,5 +231,9 @@
 "radar.away": "la {mi} mile",
 "hot.title": "Orașe fierbinți",
 "hot.sub": "Cea mai mare cerere din evenimente în 48 de ore. Atinge un oraș ca să planifici acolo.",
-"hot.none": "Încă niciun eveniment în următoarele 48 de ore."
+"hot.none": "Încă niciun eveniment în următoarele 48 de ore.",
+"demand.fixtures": "Meciuri pe arenele mari (fotbal, rugby, cursele de la Cheltenham) verificate pe {date}. Datele se pot schimba din cauza TV, verifică înainte să pleci.",
+"ev.fixture": "Program meciuri",
+"ev.koTbc": "Ora de start neconfirmată",
+"radar.month": "30 de zile"
 }

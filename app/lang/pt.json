@@ -231,5 +231,9 @@
 "radar.away": "a {mi} milhas",
 "hot.title": "Cidades quentes",
 "hot.sub": "Mais procura de eventos nas próximas 48 horas. Toque numa cidade para planear lá.",
-"hot.none": "Ainda sem eventos nas próximas 48 horas."
+"hot.none": "Ainda sem eventos nas próximas 48 horas.",
+"demand.fixtures": "Jogos nos grandes estádios (futebol, râguebi, corridas de Cheltenham) verificados a {date}. As datas podem mudar por causa da TV; confirme antes de sair.",
+"ev.fixture": "Calendário",
+"ev.koTbc": "Hora de início por confirmar",
+"radar.month": "30 dias"
 }

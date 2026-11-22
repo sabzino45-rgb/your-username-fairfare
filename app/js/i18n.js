@@ -70,3 +70,9 @@ export function dateTime(d) {
   try { return new Intl.DateTimeFormat(lang, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d); }
   catch { return d.toLocaleString(); }
 }
+
+export function dateOnly(d) {
+  const x = typeof d === "string" ? new Date(d + "T12:00") : d;
+  try { return new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", year: "numeric" }).format(x); }
+  catch { return x.toDateString(); }
+}

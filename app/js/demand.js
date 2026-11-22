@@ -193,7 +193,7 @@ export function radarEvents(events, { period = "tonight", bigOnly = false, nearT
   if (period === "tonight") { to = new Date(now); to.setHours(30, 0, 0, 0); }          // until 06:00 tomorrow
   else if (period === "weekend") {
     const d = dayIdx(now); to = new Date(now); to.setDate(to.getDate() + (6 - d)); to.setHours(30, 0, 0, 0);
-  } else { to = new Date(now.getTime() + 7 * 864e5); }
+  } else { to = new Date(now.getTime() + (period === "month" ? 30 : 7) * 864e5); }
   return events
     .map((e) => ({ ...e, _end: eventEnd(e), _mi: nearTown && e.lat != null ? km(nearTown.lat, nearTown.lon, e.lat, e.lon) / 1.609344
       : nearTown && e.town ? (() => { const t = TOWNS.find((x) => x.id === e.town); return t ? km(nearTown.lat, nearTown.lon, t.lat, t.lon) / 1.609344 : null; })() : null }))
