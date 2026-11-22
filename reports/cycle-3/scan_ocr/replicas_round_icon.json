@@ -1,0 +1,299 @@
+{
+ "rows": [
+  {
+   "file": "r1-dark.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £24.64 · Pickup minutes 9 · Pickup miles 3.1 · Trip minutes 19 · Trip miles 8.8",
+   "parsed": {
+    "f": [
+     24.64,
+     9,
+     3.1,
+     19,
+     8.8
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX\n\n£24.64 0\n\n* 4.93\n\nAfter fees\n\n£2.37 est. holiday entitlement included\n\n9 min (3.1 mi)\n\n1 Example Road, Sampleton\n\n19 mins (8.8 mi)\n\nTestford, AB12CD\n\nMatch\n"
+  },
+  {
+   "file": "r1-light.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £24.60 · Pickup minutes 9 · Pickup miles 3.1 · Trip minutes 19 · Trip miles 8.8",
+   "parsed": {
+    "f": [
+     24.6,
+     9,
+     3.1,
+     19,
+     8.8
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX\n\n£24.60 0\n\n* 4.93\n\nAfter fees\n\n£2.37 est. holiday entitlement included\n\n9 min (3.1 mi)\n\n1 Example Road, Sampleton\n\n19 mins (8.8 mi)\n\nTestford, AB12CD\n\nMatch\n"
+  },
+  {
+   "file": "r2-dark.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £13.95 · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.1",
+   "parsed": {
+    "f": [
+     13.95,
+     5,
+     1.7,
+     16,
+     6.1
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@® Comfort\n\n£13.95»\n\n* 4.88 After fees\n£1.00 Clean Air Zone fee included\n\n5 min (1.7 mi)\n\nMock Lane, Demoville\n16 mins (6.1 mi)\nPlaceholder Sq, ZZ9 977\n\nMatch\n\n"
+  },
+  {
+   "file": "r2-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 5 · Pickup miles 1.7 · Trip minutes 16 · Trip miles 6.1",
+   "parsed": {
+    "f": [
+     null,
+     5,
+     1.7,
+     16,
+     6.1
+    ],
+    "w": [
+     "fare_missing",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@® Comfort\n\n£13.950\n\n* 4.88\n\nAfter fees\n\n£1.00 Clean Air Zone fee included\n\n5 min (1.7 mi)\n\nMock Lane, Demoville\n\n16 mins (6.1 mi)\n\nPlaceholder Sq, ZZ9 977\n\nMatch\n"
+  },
+  {
+   "file": "r3-dark.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £41.20 · Pickup minutes 11 · Pickup miles 4.4 · Trip minutes 33 · Trip miles 18.2",
+   "parsed": {
+    "f": [
+     41.2,
+     11,
+     4.4,
+     33,
+     18.2
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX Priority\n\n£41.20\n\n* 5.00\n\nAfter fees\n\n£3.50 tolls included\n\n11 min (4.4 mi)\n\nFictional Way, Nowhere\n\n33 mins (18.2 mi)\n\nImaginary, QQ11QQ\n\nAccept\n"
+  },
+  {
+   "file": "r3-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 11 · Pickup miles 4.4 · Trip minutes 33 · Trip miles 18.2",
+   "parsed": {
+    "f": [
+     null,
+     11,
+     4.4,
+     33,
+     18.2
+    ],
+    "w": [
+     "fare_missing",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX Priority\n\n£41.200\n\n* 5.00\n\nAfter fees\n\n£3.50 tolls included\n\n11 min (4.4 mi)\n\nFictional Way, Nowhere\n\n33 mins (18.2 mi)\n\nImaginary, QQ11QQ\n\nAccept\n"
+  },
+  {
+   "file": "r4-dark.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 3 · Pickup miles 0.9 · Trip minutes 10 · Trip miles 3.2",
+   "parsed": {
+    "f": [
+     null,
+     3,
+     0.9,
+     10,
+     3.2
+    ],
+    "w": [
+     "fare_missing",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@® UberXL\n\n£9.850\n\n* 4.79\n\nAfter fees\n\n£0.95 est. holiday entitlement included\n\n3 min (0.9 mi)\n\nSample St, Testbury\n\n10 mins (3.2 mi)\n\nMockham, XY3 4ZW\n\nMatch\n"
+  },
+  {
+   "file": "r4-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 3 · Pickup miles 0.9 · Trip minutes 10 · Trip miles 3.2",
+   "parsed": {
+    "f": [
+     null,
+     3,
+     0.9,
+     10,
+     3.2
+    ],
+    "w": [
+     "fare_missing",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberXL\n\n£9.850\n\n* 4.79\n\nAfter fees\n\n£0.95 est. holiday entitlement included\n\n3 min (0.9 mi)\n\nSample St, Testbury\n\n10 mins (3.2 mi)\n\nMockham, XY3 4ZW\n\nMatch\n"
+  },
+  {
+   "file": "r5-dark.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £18.40 · Pickup minutes 7 · Pickup miles 2.6 · Trip minutes 14 · Trip miles 5.5",
+   "parsed": {
+    "f": [
+     18.4,
+     7,
+     2.6,
+     14,
+     5.5
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® Uber Green\n\n£18.40 0\n\n* 4.95\n\nAfter fees\n\n£1.50 tip included\n\n7 min (2.6 mi)\n\nDemo Avenue, Exampleby\n\n14 mins (5.5 mi)\n\nTrialton, AAT 1AA\n\nMatch\n"
+  },
+  {
+   "file": "r5-light.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £18.40 · Pickup minutes 7 · Pickup miles 2.6 · Trip minutes 14 · Trip miles 5.5",
+   "parsed": {
+    "f": [
+     18.4,
+     7,
+     2.6,
+     14,
+     5.5
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® Uber Green\n\n£18.40 0\n\n* 4.95\n\nAfter fees\n\n£1.50 tip included\n\n7 min (2.6 mi)\n\nDemo Avenue, Exampleby\n\n14 mins (5.5 mi)\n\nTrialton, AAT 1AA\n\nMatch\n"
+  },
+  {
+   "file": "r6-dark.png",
+   "word": "ACCEPT",
+   "readout": "Read from the card: Fare shown £31.75 · Pickup minutes 14 · Pickup miles 6 · Trip minutes 21 · Trip miles 9.7",
+   "parsed": {
+    "f": [
+     31.75,
+     14,
+     6,
+     21,
+     9.7
+    ],
+    "w": [
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n@® UberX\n\n£31.75\n\n* 490 After fees\n£3.06 est. holiday entitlement included\n\n14 min (6.0 mi)\nModel Close, Fakeley\n21 mins (9.7 mi)\nPretendon, BB2 2BB\n\nMatch\n\n"
+  },
+  {
+   "file": "r6-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 14 · Pickup miles 6 · Trip minutes 21 · Trip miles 9.7",
+   "parsed": {
+    "f": [
+     null,
+     14,
+     6,
+     21,
+     9.7
+    ],
+    "w": [
+     "fare_missing",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX\n\n£31.750\n\n* 4.90\n\nAfter fees\n\n£3.06 est. holiday entitlement included\n\n14 min (6.0 mi)\n\nModel Close, Fakeley\n\n21 mins (9.7 mi)\n\nPretendon, BB2 2BB\n\nMatch\n"
+  },
+  {
+   "file": "x1-dark.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 6 · Pickup miles 2 · Trip minutes 15 · Trip miles 5.9",
+   "parsed": {
+    "f": [
+     null,
+     6,
+     2,
+     15,
+     5.9
+    ],
+    "w": [
+     "fare_ambiguous",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX\n\n£12100\n\n£45.00 0\n\n* 4.91\n\nAfter fees\n\n£1.17 est. holiday entitlement included\n\n6 min (2.0 mi)\n\nExample Road, Sampleton\n\n15 mins (5.9 mi)\n\nTestford, AB12CD\n\nMatch\n"
+  },
+  {
+   "file": "x1-light.png",
+   "word": "UNKNOWN",
+   "readout": "Read from the card: Fare shown: not found · Pickup minutes 6 · Pickup miles 2 · Trip minutes 15 · Trip miles 5.9",
+   "parsed": {
+    "f": [
+     null,
+     6,
+     2,
+     15,
+     5.9
+    ],
+    "w": [
+     "fare_ambiguous",
+     "fare_after_fees",
+     "pickup_inferred_from_order",
+     "trip_inferred_from_order",
+     "needs_manual_entry"
+    ]
+   },
+   "text": "09:41\n\nSampleton\n\nB9999\n\n® UberX\n\n£12100\n\n£45.00 0\n\n* 4.91\n\nAfter fees\n\n£1.17 est. holiday entitlement included\n\n6 min (2.0 mi)\n\nExample Road, Sampleton\n\n15 mins (5.9 mi)\n\nTestford, AB12CD\n\nMatch\n"
+  }
+ ],
+ "errs": []
+}

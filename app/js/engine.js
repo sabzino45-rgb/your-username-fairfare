@@ -53,17 +53,18 @@ const NOT_FARE = new RegExp(
 // A card's fare line holds the amount and nothing else that reads as words: only punctuation,
 // ride-type names or the Accept button may stand before or after it; a leg may follow on the line.
 const FARE_WORDS = "(?:[^A-Za-z0-9]|\\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|" +
-  "lux|black|electric|priority|saver|wav|access|assist|accept|x|share|taxi)\\b)*";
+  "lux|black|electric|priority|saver|wav|access|assist|accept|match|x|share|taxi)\\b)*";
 const FARE_PREFIX_OK = new RegExp("^" + FARE_WORDS + "$", "i");
 const FARE_TRAIL_OK = FARE_PREFIX_OK;
-const ACCEPT = /\baccept\b/i;
+// Cycle 3: the card's button words, one shared list ("Match" on real UK cards, "Accept"); see parser.py.
+const ACCEPT = /\b(?:accept|match)\b/i;
 // A status label next to a bare amount marks the earnings pill ("£84.20" / "You're online").
 const PILL_LABEL = /\b(?:online|offline|finding trips|earnings|today|this week)\b/i;
 const RATE_AFTER = /[ \t]*(?:\/|per\b)/iy;                                   // "£1.14/mi"
 const RANGE_AFTER = new RegExp("[ \\t]*[-\\u2013\\u2014~][ \\t]*£[ \\t]?" + NUM, "y"); // "£10.80–£13.20"
 // A card fare whose £ was misread ("E11.10", "€9.60", "$12.95") or dropped ("15.75"), alone on its line:
 // the card's own fare is unreadable. Without a symbol, values up to 5 are a rating that lost its star.
-const GARBLED_FARE_LINE = /^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})[^A-Za-z0-9£]*$/;
+const GARBLED_FARE_LINE = /^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})(?:[ \t]+[0-9])?[^A-Za-z0-9£]*$/;
 function garbledFareLine(line) {
   const g = GARBLED_FARE_LINE.exec(line);
   return !!g && (g[1] !== undefined || f(ocrDigits(g[2])) > 5);
@@ -73,7 +74,7 @@ const NOT_LEG = /\b(?:arriv\w*|eta|remaining|destination|route|to go)\b/i;
 // The fare sits on the card just above the legs: at most this many NON-BLANK lines above the first leg.
 const FARE_WINDOW_LINES = 4;
 // Fare plausibility against its legs (UK private hire, generous); see parser.py for the reasoning.
-const FARE_MAX_BASE = 20.0, FARE_MAX_PER_MILE = 6.0, FARE_MAX_PER_MIN = 1.0, FARE_MIN_PER_MILE = 0.25;
+const FARE_MAX_BASE = 20.0, FARE_MAX_PER_MILE = 10.0, FARE_MAX_PER_MIN = 1.0, FARE_MIN_PER_MILE = 0.25;
 const SURGE = new RegExp("\\+\\s?£\\s?" + NUM + "[^\\n]*?(?:surge|boost|included)", "i");
 // [ \t] not \s: a label must be on the same line, or "Trip" on the next line is stolen.
 // Hours: "1 hr 20 mins", "1h20min", "1h 20m", "1hr20", "2 hrs".
@@ -118,20 +119,55 @@ const RATING_ONLY = /^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[★*xX%]?
 // line holds only ASCII punctuation, spaces and a few symbols. Any other letter, in any script, means
 // ordinary words (notification, pill, banner). A status-bar line (clock or battery %) isn't card text.
 const CARD_WORDS = new RegExp(
-  "\\b(?:" + PRODUCT_NAMES + "|uber|accept|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|" +
+  "\\b(?:" + PRODUCT_NAMES + "|uber|accept|match|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|" +
   "surge|boost|includes?|included|incl|per)\\b", "gi");
 const LONE_LETTER = /\b[A-Za-z]\b/g;
 const OCR_NUMBER = /[0-9OoIl]*[0-9][0-9OoIl]*/g; // "4.9l", "£1O.80": digits OCR misread
 const CARD_CHARS = /^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013\u2014\u2022\u200e\u200f\u20ac\u2605]*$/;
 // A battery % never follows a decimal point: "4.90 %" is a rating whose star OCR read as "%".
 const STATUS_BAR = /(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|(?:^|[^0-9.,])[0-9]{1,3}[ \t]?%/;
+// Cycle 3 (real Uber UK card); see parser.py. A sub-amount line: a £ amount whose caption on the same line says
+// it is a part of, or a note on, the fare. Never a candidate, never a rival; it must be smaller than the fare.
+const SUB_CAPTION = new RegExp(
+  "\\b(?:included|includes?|incl|est|estimated|entitlement|holiday|after[ \\t]+fees|tips?|fees?|tolls?|" +
+  "surcharges?|clean[ \\t]+air[ \\t]+zone|caz|boost|surge)\\b", "i");
+const AFTER_FEES_CHIP = /^[^A-Za-z£]*after[ \t]+fees[^A-Za-z£]*$/i; // "% 5.00 After fees"
+const AFTER_FEES = /\bafter[ \t]+fees\b/i;
+// Short OCR junk: no digit, no £, at most 4 characters besides spaces, no run of 3 letters ("Goal" is a word).
+const JUNK_LINE = /^(?![^\n]*[A-Za-z]{3})[ \t]*(?:[^ \t0-9£][ \t]*){1,4}$/;
+// A junk token on a label line: 1 or 2 characters, no £, not itself a ride-type name ("ae Comfort").
+const LABEL_JUNK = /(?:^|(?<=[ \t]))[^ \t£]{1,2}(?=[ \t]|$)/g;
+const LABEL_JUNK_MAX = 2;
+const PRODUCT_TOKEN = new RegExp("^(?:" + PRODUCT_NAMES + ")$", "i");
+const CLEAN_FARE = /£[ \t]?[0-9]+\.[0-9]{2}$/; // an OCR-junk icon may follow a clean "£d.dd" fare ("£24.60 4")
+const ICON_TRAIL = /^[ \t]+[0-9](?:[ \t]+[^A-Za-z0-9 \t]+)?[ \t]*$/;
+// A clean fare with a surge icon after it ("£24.60 ⚡", "£24.60 4") is card text (the no-label cut-off).
+const FARE_ICON_LINE = /^[ \t]*£[ \t]?[0-9]+\.[0-9]{2}(?:[ \t]+[0-9])?(?:[ \t]*[^A-Za-z0-9 \t]{1,2})?[ \t]*$/u;
 const productLabelLine = (line) =>
   GLUED_LABEL.test(line) || (PRODUCT_WORD.test(line.replace(PRODUCT_BADGES, " ")) && PRODUCT_LABEL.test(line));
+// A label that may anchor the fare zone: a product label, or one with at most 2 short OCR-junk tokens besides names.
+function anchorLabelLine(line) {
+  if (productLabelLine(line)) return true;
+  const junk = (line.match(LABEL_JUNK) || []).filter((t) => !PRODUCT_TOKEN.test(t));
+  if (!(junk.length > 0 && junk.length <= LABEL_JUNK_MAX)) return false;
+  return productLabelLine(line.replace(LABEL_JUNK, (t) => (PRODUCT_TOKEN.test(t) ? t : " ")));
+}
+const subAmountLine = (line) => line.includes("£") && new RegExp(FARE_SRC).test(line) && SUB_CAPTION.test(line);
+function subAmounts(line) {
+  if (!subAmountLine(line)) return [];
+  const out = [], re = new RegExp(FARE_SRC, "g");
+  let m;
+  while ((m = re.exec(line))) if (/[0-9]/.test(m[1])) out.push(f(ocrDigits(m[1])));
+  return out;
+}
 const cardTextLine = (line) =>
-  !STATUS_BAR.test(line) && CARD_CHARS.test(line.replace(OCR_NUMBER, " ").replace(CARD_WORDS, "").replace(LONE_LETTER, ""));
+  !STATUS_BAR.test(line) && (subAmountLine(line) || AFTER_FEES_CHIP.test(line) || FARE_ICON_LINE.test(line) ||
+    CARD_CHARS.test(line.replace(OCR_NUMBER, " ").replace(CARD_WORDS, "").replace(LONE_LETTER, "")));
 const isBlank = (line) => /^[ \t\r\f\v]*$/.test(line);
-// A non-blank line that counts towards ZONE_MAX_LINES (not a rating, not a badge-only line).
+// A non-blank line that counts towards ZONE_MAX_LINES (not a rating, not a badge-only line; cycle 3: not a
+// sub-amount, the "After fees" chip or short OCR junk).
 const windowCounted = (line) => !isBlank(line) && !RATING_ONLY.test(line) &&
+  !(subAmountLine(line) || AFTER_FEES_CHIP.test(line) || JUNK_LINE.test(line)) &&
   !(/\b(?:exclusive|priority)\b/i.test(line) && PRODUCT_LABEL.test(line));
 const hasDigit = (s) => /[0-9]/.test(s);
 const matchAt = (re, text, pos) => { re.lastIndex = pos; return re.exec(text); };
@@ -174,6 +210,16 @@ export function emptyOffer(source = "scan") {
            surge: null, rider_rating: null, source, warnings: [], missing: [...REQUIRED] };
 }
 
+// Cycle 3: on the lines from start up to the first leg, note an "After fees" chip, and refuse a fare that is not
+// bigger than every sub-amount that describes it (one of them was misread).
+function checkSubAmounts(o, L, start, anchorLine) {
+  const zone = [];
+  for (let n = start; n < anchorLine; n++) zone.push(L.line(n));
+  if (zone.some((l) => AFTER_FEES.test(l))) o.warnings.push("fare_after_fees");
+  const subs = zone.flatMap(subAmounts);
+  if (o.fare !== null && subs.some((v) => v >= o.fare)) { o.fare = null; o.warnings.push("sub_amount_not_smaller"); }
+}
+
 function refuseAll(o, why) {
   o.fare = null; o.surge = null;
   o.warnings.push(why, "needs_manual_entry");
@@ -205,6 +251,7 @@ function fareFromZone(o, L, fares, label, anchorLine, first, last) {
   else if (garbled) o.warnings.push("fare_unreadable"); // the card's own fare line is misread: don't substitute
   else if (zone.length) o.fare = zone[0][2];
   else o.warnings.push("fare_missing"); // never look above the label
+  checkSubAmounts(o, L, label, anchorLine);
 }
 
 // No product label: the cycle-1 rules, but the window stops at the nearest line above the legs that is
@@ -212,6 +259,11 @@ function fareFromZone(o, L, fares, label, anchorLine, first, last) {
 function fareWithoutLabel(o, L, allFares, used, first, anchorLine) {
   let cut = -1;
   for (let n = anchorLine - 1; n >= 0; n--) if (!isBlank(L.line(n)) && !cardTextLine(L.line(n))) { cut = n; break; }
+  fareBelowCut(o, L, allFares, used, first, anchorLine, cut);
+  checkSubAmounts(o, L, cut + 1, anchorLine);
+}
+
+function fareBelowCut(o, L, allFares, used, first, anchorLine, cut) {
   const fares = allFares.filter((c) => L.no(c[0]) > cut);
   if (fares.some((c) => c[3] && c[0] < first)) { o.warnings.push("fare_ambiguous"); return; } // another card's Accept
   if (new Set(fares.map((c) => c[2])).size > 1) { o.warnings.push("fare_ambiguous"); return; } // only a lone amount
@@ -310,7 +362,10 @@ export function parseOfferText(text) {
     const rng = matchAt(RANGE_AFTER, text, end);
     if (rng) { value = Math.min(value, f(rng[1])); end = rng.index + rng[0].length; } // lower, guaranteed end
     const legOnLine = legs.find((l) => end <= l[3] && l[3] < lineEnd);
-    if (!FARE_TRAIL_OK.test(text.slice(end, legOnLine ? legOnLine[3] : lineEnd))) continue;
+    const trail = text.slice(end, legOnLine ? legOnLine[3] : lineEnd);
+    // Cycle 3: a surge icon OCR read as a digit may follow a clean "£d.dd" fare ("£24.60 4").
+    const icon = !rng && CLEAN_FARE.test(m[0]) && ICON_TRAIL.test(trail);
+    if (!(FARE_TRAIL_OK.test(trail) || icon)) continue;
     if (L.neighbours(n).some((x) => PILL_LABEL.test(x))) continue;
     if (RIDER_PRICE.test(line) || L.neighbours(n).some((x) => RIDER_PRICE.test(x))) continue; // the rider's price
     if (PROMO_CAPTION.test(line) || promoCaptioned(L, n)) continue; // a promo, reward or earnings amount
@@ -323,7 +378,7 @@ export function parseOfferText(text) {
     if (fares.some((c) => first < c[0] && c[0] < last)) return refuseAll(o, "multiple_offers"); // stacked offers
     const anchorLine = L.no(first);
     let label = null;
-    for (let n = anchorLine - 1; n >= 0; n--) if (productLabelLine(L.line(n))) { label = n; break; }
+    for (let n = anchorLine - 1; n >= 0; n--) if (anchorLabelLine(L.line(n))) { label = n; break; }
     let counted = 0;
     if (label !== null) for (let n = label + 1; n < anchorLine; n++) if (windowCounted(L.line(n))) counted++;
     if (label !== null && counted > ZONE_MAX_LINES) o.warnings.push("fare_label_too_far"); // not this card's label
@@ -543,7 +598,7 @@ export function cardMarkerFound(text) {
   const legRe = new RegExp(LEG_SRC, "i");
   const first = lines.findIndex((l) => legRe.test(l) && !NOT_LEG.test(l));
   if (first < 0) return false;
-  return lines.slice(0, first).some(productLabelLine) || lines.slice(first).some((l) => ACCEPT.test(l));
+  return lines.slice(0, first).some(anchorLabelLine) || lines.slice(first).some((l) => ACCEPT.test(l));
 }
 
 // Screenshot scans: the text rules' fare and the height fare must agree, and the card must show a label or an

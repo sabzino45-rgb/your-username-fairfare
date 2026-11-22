@@ -77,10 +77,12 @@ _NOT_FARE = re.compile(
 # "£9.15 · UberX", "Accept £10.20"); a leg may follow on the same line ("£7.20 · 3 min (1.0 mi)").
 # Anything else ("£30 for the shopping", "£25.00 from Sam") is a message, banner or notification.
 _FARE_WORDS = (r"(?:[^A-Za-z0-9]|\b(?:uber|uberx|uberxl|comfort|exclusive|xl|exec|executive|green|pet|"
-               r"lux|black|electric|priority|saver|wav|access|assist|accept|x|share|taxi)\b)*")
+               r"lux|black|electric|priority|saver|wav|access|assist|accept|match|x|share|taxi)\b)*")
 _FARE_PREFIX_OK = re.compile("^" + _FARE_WORDS + "$", re.I | re.ASCII)
 _FARE_TRAIL_OK = _FARE_PREFIX_OK
-_ACCEPT = re.compile(r"\baccept\b", re.I | re.ASCII)
+# Cycle 3: the card's button words, one shared list. Real UK cards say "Match" (pilot); older/other layouts "Accept".
+# Wherever the rules use "the Accept line", any of these words counts.
+_ACCEPT = re.compile(r"\b(?:accept|match)\b", re.I | re.ASCII)
 # A status label next to a bare amount marks the earnings pill ("£84.20" / "You're online").
 _PILL_LABEL = re.compile(r"\b(?:online|offline|finding trips|earnings|today|this week)\b", re.I | re.ASCII)
 _RATE_AFTER = re.compile(r"[ \t]*(?:/|per\b)", re.I | re.ASCII)            # "£1.14/mi", "£0.62 per min"
@@ -89,7 +91,7 @@ _RANGE_AFTER = re.compile(r"[ \t]*[-–—~][ \t]*£[ \t]?" + _NUM)    # "£10.8
 # alone on its line: the card's own fare is unreadable, so no other amount may stand in for it.
 # Without any symbol, values up to 5 are left alone: that is a rider rating whose star was lost.
 _GARBLED_FARE_LINE = re.compile(
-    r"^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})[^A-Za-z0-9£]*$", re.ASCII
+    r"^[^A-Za-z0-9£€$]*([A-Za-z€$¥¢]{1,2})?[ \t]?([0-9OoIl]{1,3}[.,][0-9OoIl]{2})(?:[ \t]+[0-9])?[^A-Za-z0-9£]*$", re.ASCII
 )
 # Lines whose min/distance pair is navigation, not an offer leg.
 _NOT_LEG = re.compile(r"\b(?:arriv\w*|eta|remaining|destination|route|to go)\b", re.I | re.ASCII)
@@ -100,7 +102,10 @@ _FARE_WINDOW_LINES = 4
 # base £20 + £6/mile + £1/minute over pickup+trip is above any surge we know of (about 4x
 # the ~£2.50 base, ~£1.25/mi, ~£0.20/min driver rates), plus tolls/airport fees.
 # Below £0.25 per mile no UK offer pays. Outside these, a decimal point was probably lost.
-_FARE_MAX_BASE, _FARE_MAX_PER_MILE, _FARE_MAX_PER_MIN, _FARE_MIN_PER_MILE = 20.0, 6.0, 1.0, 0.25
+# Cycle 3: the owner's real completed trips pay about £1.5-£10 per trip mile (research/, aggregate only). £6/mile
+# refused a £10/mile fare on trips over about 8 miles (tests/test_parser_real_layout.py), so the cap is now
+# £10/mile; a lost decimal point (x100) is still far outside it.
+_FARE_MAX_BASE, _FARE_MAX_PER_MILE, _FARE_MAX_PER_MIN, _FARE_MIN_PER_MILE = 20.0, 10.0, 1.0, 0.25
 _SURGE = re.compile(r"\+\s?£\s?" + _NUM + r"[^\n]*?(?:surge|boost|included)", re.I | re.ASCII)
 # "6 mins (1.8 mi) away" / "6 min (2.9 km) away" / "Pickup: 6 min · 1.8 mi" / "1 hr 20 mins (25 mi) trip"
 _LEG = re.compile(
@@ -144,7 +149,7 @@ _RATING_ONLY = re.compile(r"^[^A-Za-z0-9£]*[0-9OoIl][.,][0-9OoIl]{1,2}[ \t]*[�
 # direction marks). Any other letter, in any script, means ordinary words: a notification, a pill,
 # a banner. A status-bar line (clock or battery %) is not card text either.
 _CARD_WORDS = re.compile(
-    r"\b(?:" + _PRODUCT_NAMES + r"|uber|accept|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|"
+    r"\b(?:" + _PRODUCT_NAMES + r"|uber|accept|match|mins?|minutes?|mi|miles?|km|hrs?|hours?|away|trip|pickup|"
     r"surge|boost|includes?|included|incl|per)\b", re.I | re.ASCII)
 _LONE_LETTER = re.compile(r"\b[A-Za-z]\b", re.ASCII)
 _OCR_NUMBER = re.compile(r"[0-9OoIl]*[0-9][0-9OoIl]*", re.ASCII)  # "4.9l", "£1O.80": digits OCR misread
@@ -152,6 +157,28 @@ _CARD_CHARS = re.compile(r"^[\x00-\x40\x5b-\x60\x7b-\x7f\u00a0\u00a3\u00b7\u2013
 # A status-bar line: a clock ("14:05") or a battery level ("87%").
 # A battery % never follows a decimal point: "4.90 %" is a rating whose star OCR read as "%".
 _STATUS_BAR = re.compile(r"(?:^|[^0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])|(?:^|[^0-9.,])[0-9]{1,3}[ \t]?%", re.ASCII)
+# Cycle 3 (real Uber UK card). A sub-amount line: a £ amount whose caption on the same line says it is a part of,
+# or a note on, the fare ("£2.40 est. holiday entitlement included", "£2.00 tip included", "£3.50 tolls").
+# Never a fare candidate, never a rival fare; it must be smaller than the fare. One shared caption list.
+_SUB_CAPTION = re.compile(
+    r"\b(?:included|includes?|incl|est|estimated|entitlement|holiday|after[ \t]+fees|tips?|fees?|tolls?|"
+    r"surcharges?|clean[ \t]+air[ \t]+zone|caz|boost|surge)\b", re.I | re.ASCII)
+# The "After fees" chip next to the fare, with or without an OCR-junk icon and a number ("% 5.00 After fees").
+_AFTER_FEES_CHIP = re.compile(r"^[^A-Za-z£]*after[ \t]+fees[^A-Za-z£]*$", re.I | re.ASCII)
+_AFTER_FEES = re.compile(r"\bafter[ \t]+fees\b", re.I | re.ASCII)
+# A short OCR-junk line (a mis-read icon, "Ee ~"): no digit, no £, at most 4 characters besides spaces,
+# and no run of 3 letters (a short word such as "Goal" is a word, not junk).
+_JUNK_LINE = re.compile(r"^(?![^\n]*[A-Za-z]{3})[ \t]*(?:[^ \t0-9£][ \t]*){1,4}$", re.ASCII)
+# A junk token on a label line: 1 or 2 characters, no £, not itself a ride-type name ("ae Comfort",
+# "© UberX Priority", a mis-read icon "4 XL").
+_LABEL_JUNK = re.compile(r"(?:^|(?<=[ \t]))[^ \t£]{1,2}(?=[ \t]|$)", re.ASCII)
+_PRODUCT_TOKEN = re.compile(r"^(?:" + _PRODUCT_NAMES + r")$", re.I | re.ASCII)
+_LABEL_JUNK_MAX = 2
+# An OCR-junk icon after a clean fare (surge icon read as "4"): one digit, alone, after "£d.dd".
+_CLEAN_FARE = re.compile(r"£[ \t]?[0-9]+\.[0-9]{2}$", re.ASCII)
+_ICON_TRAIL = re.compile(r"^[ \t]+[0-9](?:[ \t]+[^A-Za-z0-9 \t]+)?[ \t]*$", re.ASCII)
+# A clean fare with a surge icon after it ("£24.60 ⚡", "£24.60 4") is card text (the no-label cut-off).
+_FARE_ICON_LINE = re.compile(r"^[ \t]*£[ \t]?[0-9]+\.[0-9]{2}(?:[ \t]+[0-9])?(?:[ \t]*[^A-Za-z0-9 \t]{1,2})?[ \t]*$")
 
 
 def _f(s: str) -> float:
@@ -213,6 +240,27 @@ def _product_label_line(line: str) -> bool:
     return bool(_PRODUCT_WORD.search(_PRODUCT_BADGES.sub(" ", line))) and bool(_PRODUCT_LABEL.match(line))
 
 
+def _anchor_label_line(line: str) -> bool:
+    """A product label that may anchor the fare zone: as _product_label_line, or one that, besides
+    ride-type names, holds at most 2 short OCR-junk tokens (at most 2 characters each)."""
+    if _product_label_line(line):
+        return True
+    junk = [t for t in _LABEL_JUNK.findall(line) if not _PRODUCT_TOKEN.match(t)]
+    if not 0 < len(junk) <= _LABEL_JUNK_MAX:
+        return False
+    return _product_label_line(_LABEL_JUNK.sub(lambda m: m.group(0) if _PRODUCT_TOKEN.match(m.group(0)) else " ", line))
+
+
+def _sub_amount_line(line: str) -> bool:
+    """A line with a £ amount and a sub-amount caption (part of, or a note on, the fare)."""
+    return "£" in line and bool(_FARE.search(line)) and bool(_SUB_CAPTION.search(line))
+
+
+def _sub_amounts(line: str) -> list:
+    return [_f(m.group(1).translate(_OCR_DIGITS)) for m in _FARE.finditer(line)
+            if re.search(r"[0-9]", m.group(1))] if _sub_amount_line(line) else []
+
+
 def _caption(line: str) -> bool:
     """A promo/reward caption line: a promo word, no £ amount of its own, not a surge/boost-included line."""
     return bool(_PROMO_CAPTION.search(line)) and "£" not in line and not _SURGE.search(line)
@@ -232,6 +280,8 @@ def _window_counted(line: str) -> bool:
     """A non-blank line that counts towards _ZONE_MAX_LINES (not a rating, not a badge-only line)."""
     if _BLANK.match(line) or _RATING_ONLY.match(line):
         return False
+    if _sub_amount_line(line) or _AFTER_FEES_CHIP.match(line) or _JUNK_LINE.match(line):
+        return False  # cycle 3: sub-amounts, the "After fees" chip and short OCR junk describe the fare
     return not (_PRODUCT_BADGES.search(line) and _PRODUCT_LABEL.match(line))
 
 
@@ -239,6 +289,8 @@ def _card_text_line(line: str) -> bool:
     """False for a status-bar line or a line with ordinary words (notification, pill, banner)."""
     if _STATUS_BAR.search(line):
         return False
+    if _sub_amount_line(line) or _AFTER_FEES_CHIP.match(line) or _FARE_ICON_LINE.match(line):
+        return True  # cycle 3: a sub-amount, the "After fees" chip or a fare with a surge icon is part of the card
     return bool(_CARD_CHARS.match(_LONE_LETTER.sub("", _CARD_WORDS.sub("", _OCR_NUMBER.sub(" ", line)))))
 
 
@@ -249,6 +301,18 @@ def _plausible(value: float, legs: list) -> bool:
         return True
     top = _FARE_MAX_BASE + _FARE_MAX_PER_MILE * miles + _FARE_MAX_PER_MIN * mins
     return _FARE_MIN_PER_MILE * miles <= value <= top
+
+
+def _check_sub_amounts(offer: Offer, lines: _Lines, start: int, anchor_line: int) -> None:
+    """Cycle 3: on the lines from start up to the first leg, note an "After fees" chip, and refuse a fare
+    that is not bigger than every sub-amount that describes it (one of them was misread)."""
+    zone = [lines.line(n) for n in range(start, anchor_line)]
+    if any(_AFTER_FEES.search(l) for l in zone):
+        offer.warnings.append("fare_after_fees")
+    subs = [v for l in zone for v in _sub_amounts(l)]
+    if offer.fare is not None and any(v >= offer.fare for v in subs):
+        offer.fare = None
+        offer.warnings.append("sub_amount_not_smaller")
 
 
 def _refuse_all(offer: Offer, why: str) -> Offer:
@@ -287,6 +351,7 @@ def _fare_from_zone(offer: Offer, lines: _Lines, fares: list, label: int, anchor
         offer.fare = zone[0][2]
     else:
         offer.warnings.append("fare_missing")  # never look above the label
+    _check_sub_amounts(offer, lines, label, anchor_line)
 
 
 def _fare_without_label(offer: Offer, lines: _Lines, fares: list, used: list, first: int,
@@ -297,6 +362,12 @@ def _fare_without_label(offer: Offer, lines: _Lines, fares: list, used: list, fi
     above the legs (another card's) refuses."""
     cut = next((n for n in range(anchor_line - 1, -1, -1)
                 if not _BLANK.match(lines.line(n)) and not _card_text_line(lines.line(n))), -1)
+    _fare_below_cut(offer, lines, fares, used, first, anchor_line, cut)
+    _check_sub_amounts(offer, lines, cut + 1, anchor_line)
+
+
+def _fare_below_cut(offer: Offer, lines: _Lines, fares: list, used: list, first: int,
+                    anchor_line: int, cut: int) -> None:
     fares = [c for c in fares if lines.no(c[0]) > cut]
     if any(c[3] and c[0] < first for c in fares):
         offer.warnings.append("fare_ambiguous")  # an Accept line above the legs: another card's
@@ -410,7 +481,10 @@ def parse_offer_text(text: str) -> Offer:
         if rng:
             value, end = min(value, _f(rng.group(1))), rng.end()  # a range: the lower, guaranteed end
         trail_end = next((l[3] for l in legs if end <= l[3] < line_end), line_end)
-        if not _FARE_TRAIL_OK.match(text[end:trail_end]):
+        trail = text[end:trail_end]
+        # Cycle 3: a surge icon OCR read as a digit may follow a clean "£d.dd" fare ("£24.60 4").
+        icon = not rng and bool(_CLEAN_FARE.match(m.group(0))) and bool(_ICON_TRAIL.match(trail))
+        if not (_FARE_TRAIL_OK.match(trail) or icon):
             continue
         if any(_PILL_LABEL.search(nb) for nb in lines.neighbours(n)):
             continue
@@ -426,7 +500,7 @@ def parse_offer_text(text: str) -> Offer:
         if any(first < c[0] < last for c in fares):
             return _refuse_all(offer, "multiple_offers")  # a second fare between the legs: stacked offers
         anchor_line = lines.no(first)
-        label = next((n for n in range(anchor_line - 1, -1, -1) if _product_label_line(lines.line(n))), None)
+        label = next((n for n in range(anchor_line - 1, -1, -1) if _anchor_label_line(lines.line(n))), None)
         if label is not None and sum(_window_counted(lines.line(n)) for n in range(label + 1, anchor_line)) > _ZONE_MAX_LINES:
             offer.warnings.append("fare_label_too_far")  # the nearest label is not this card's: no fare
         elif label is not None:
