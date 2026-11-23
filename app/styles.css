@@ -203,3 +203,90 @@ body.dropping .view { outline: 3px dashed var(--accent); outline-offset: 4px; bo
 .barrow .track { height: 12px; border-radius: 999px; background: var(--raise); overflow: hidden; }
 .barrow .track i { display: block; height: 100%; background: var(--heat3); border-radius: 999px; }
 .barrow .val { font: 500 12px var(--mono); color: var(--muted); white-space: nowrap; }
+
+/* ---------- Eye-catching layer: hero banners, accent cards, driver news ---------- */
+:root { --blue: #5aa9ff; --violet: #b68cff; --amber: #ffb547; --red: #ff6b5e; }
+:root[data-theme="light"] { --blue: #1f6fd1; --violet: #7a4fd6; --amber: #b86e00; --red: #c4352a; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --blue: #1f6fd1; --violet: #7a4fd6; --amber: #b86e00; --red: #c4352a; } }
+
+/* Hero: always a deep night gradient so it pops in light and dark themes */
+.hero {
+  position: relative; overflow: hidden; isolation: isolate;
+  border-radius: 22px; padding: 20px 18px 16px; display: flex; flex-direction: column; gap: 10px;
+  color: #f2f7f5; background: linear-gradient(140deg, #0b3b2b 0%, #0f2c44 55%, #2b1d4d 100%);
+  box-shadow: 0 10px 30px -12px rgba(16, 60, 45, .6);
+}
+.hero::before, .hero::after { content: ""; position: absolute; z-index: -1; border-radius: 50%; filter: blur(8px); }
+.hero::before { inline-size: 220px; block-size: 220px; inset-inline-end: -70px; inset-block-start: -90px; background: radial-gradient(circle, rgba(79, 196, 138, .55), transparent 70%); }
+.hero::after { inline-size: 180px; block-size: 180px; inset-inline-start: -60px; inset-block-end: -90px; background: radial-gradient(circle, rgba(182, 140, 255, .35), transparent 70%); }
+.hero .eyebrow { color: #7fe0ae; }
+.hero h1 { color: #fff; font-size: 34px; }
+.hero-desc { margin: 0; color: rgba(242, 247, 245, .82); font-size: 14px; }
+.hero-level { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; font: 700 30px/1 var(--display); letter-spacing: .02em;
+  padding: 8px 16px 8px 12px; border-radius: 999px; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14); }
+.pulse { inline-size: 12px; block-size: 12px; border-radius: 50%; background: #9fb3ab; box-shadow: 0 0 0 0 currentColor; }
+.hero[data-l="1"] .pulse { background: #cde8d9; }
+.hero[data-l="2"] .pulse { background: #4fc48a; color: rgba(79, 196, 138, .6); animation: pulse 1.8s infinite; }
+.hero[data-l="3"] .pulse { background: #ffb547; color: rgba(255, 181, 71, .7); animation: pulse 1.2s infinite; }
+.hero[data-l="3"] .hero-level { background: linear-gradient(90deg, rgba(255, 181, 71, .25), rgba(255, 107, 94, .2)); border-color: rgba(255, 181, 71, .5); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 12px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none !important; } }
+.hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.hero-stats > div { background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .1); border-radius: 14px; padding: 10px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hero-stats span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: rgba(242, 247, 245, .65); }
+.hero-stats b { font: 700 22px/1.1 var(--display); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-stats small { font-size: 12px; color: rgba(242, 247, 245, .7); }
+.hero-town { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.hero-town select { flex: 1 1 160px; min-width: 0; background: rgba(0, 0, 0, .25); color: #fff; border: 1px solid rgba(255, 255, 255, .2); border-radius: 12px; padding: 10px 12px; font: 600 15px var(--body); }
+.hero-town select option, .hero-town select optgroup { color: #17201d; }
+.hero .btn { background: rgba(255, 255, 255, .1); color: #fff; border-color: rgba(255, 255, 255, .22); }
+.hero .help { color: rgba(242, 247, 245, .75); }
+
+/* Main page hero */
+.hero-check h1 { font-size: 36px; }
+.hero-progress { display: flex; flex-direction: column; gap: 6px; background: rgba(255, 255, 255, .07); border-radius: 14px; padding: 10px 12px; }
+.hp-row { display: flex; justify-content: space-between; font-size: 13px; color: rgba(242, 247, 245, .8); }
+.hp-row b { color: #fff; font-size: 15px; }
+.hp-bar { block-size: 8px; border-radius: 99px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.hp-bar i { display: block; block-size: 100%; border-radius: inherit; background: linear-gradient(90deg, #4fc48a, #b8f26b); min-inline-size: 4px; }
+.ticker { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #fff; background: rgba(0, 0, 0, .22); border-radius: 12px; padding: 8px 10px; font-size: 13px; min-width: 0; }
+.ticker-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticker-more { color: #7fe0ae; font-weight: 600; white-space: nowrap; font-size: 12px; }
+
+/* Brighter primary button */
+.btn.primary { background: linear-gradient(135deg, #36b87a, #1f9a83); color: #fff; border: 0; box-shadow: 0 6px 18px -6px rgba(54, 184, 122, .7); font-size: 15px; padding-block: 12px; }
+
+/* Accent cards: a coloured top edge and title per tool */
+.card.k-go, .card.k-blue, .card.k-violet, .card.k-amber, .card.news { border-top-width: 3px; }
+.card.k-go { border-top-color: var(--go); }
+.card.k-blue { border-top-color: var(--blue); }
+.card.k-violet { border-top-color: var(--violet); }
+.card.k-amber { border-top-color: var(--amber); }
+.card.k-blue h2 { color: var(--blue); }
+.card.k-violet h2 { color: var(--violet); }
+.card.k-amber h2 { color: var(--amber); }
+
+/* Driver news */
+.card.news { border-top-color: var(--red); background: linear-gradient(180deg, color-mix(in srgb, var(--red) 7%, var(--surface)), var(--surface) 120px); }
+.title-ic { display: flex; gap: 10px; align-items: flex-start; }
+.title-ic > svg { inline-size: 36px; block-size: 36px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--red) 18%, transparent); color: var(--red); }
+.count { display: inline-grid; place-items: center; min-inline-size: 22px; block-size: 22px; padding: 0 6px; border-radius: 99px; background: var(--red); color: #fff; font: 700 12px var(--body); vertical-align: middle; }
+.news-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.news-item { --tone: var(--muted); display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--raise);
+  border-inline-start: 4px solid var(--tone); min-width: 0; }
+.news-item[data-tone="alert"], .ticker[data-tone="alert"] { --tone: var(--red); }
+.news-item[data-tone="warn"], .ticker[data-tone="warn"] { --tone: var(--amber); }
+.news-item[data-tone="good"], .ticker[data-tone="good"] { --tone: var(--go); }
+.news-item[data-tone="info"], .ticker[data-tone="info"] { --tone: var(--blue); }
+.news-ic { flex: none; inline-size: 32px; block-size: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, transparent); }
+.news-ic svg { inline-size: 18px; block-size: 18px; }
+.news-body { flex: 1; min-width: 0; }
+.news-body p { margin: 2px 0 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.news-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--tone, var(--accent)); }
+.ticker .news-tag { color: #fff; background: var(--tone); padding: 2px 7px; border-radius: 99px; flex: none; }
+.news-item time { font: 600 12px var(--mono); color: var(--muted); flex: none; }
+.news-item[data-tone="alert"] { background: color-mix(in srgb, var(--red) 10%, var(--raise)); }
+.hero-stats b { white-space: normal; overflow: visible; font-size: 20px; overflow-wrap: anywhere; }
+/* Empty verdict: inviting, not a grey box */
+.verdict:not([data-d]), .verdict[data-d="UNKNOWN"] { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%), var(--surface); }

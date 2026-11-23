@@ -1,7 +1,7 @@
 // Offline support: cache the app shell so FairFare opens with no signal.
-const CACHE = "fairfare-v4";
+const CACHE = "fairfare-v5";
 const SHELL = ["./", "index.html", "styles.css", "manifest.webmanifest", "icons/icon.svg",
-  "js/app.js", "js/engine.js", "js/demand.js", "js/southwest.js", "js/i18n.js", "js/store.js", "lang/en.json"];
+  "js/app.js", "js/engine.js", "js/demand.js", "js/progress.js", "js/news.js", "js/southwest.js", "js/i18n.js", "js/store.js", "lang/en.json"];
 
 // Share target hand-off (manifest "share_target"). A shared screenshot waits here only until
 // the Check screen reads it; the page deletes this whole cache straight after, success or not.

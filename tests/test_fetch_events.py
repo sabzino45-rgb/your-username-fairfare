@@ -52,3 +52,17 @@ def test_weather_transform():
     out = transform_weather(["exeter", "bude"], resp)
     assert out["start"] == "2026-11-22T18:00"
     assert out["towns"] == {"exeter": {"p": [20, 85], "r": [0.0, 1.3], "t": [9, 9]}}
+
+
+def test_flood_transform_keeps_south_west_only():
+    from tools.fetch_events import transform_floods
+    data = {"items": [
+        {"floodAreaID": "a1", "description": "River Parrett at Langport", "severityLevel": 2, "timeRaised": "2026-11-23T08:00:00",
+         "floodArea": {"county": "Somerset", "riverOrSea": "River Parrett"}},
+        {"floodAreaID": "a2", "description": "River Severn at Tewkesbury", "severityLevel": 3,
+         "floodArea": {"county": "Gloucestershire, Worcestershire"}},
+        {"floodAreaID": "a3", "description": "River Ouse at York", "severityLevel": 1, "floodArea": {"county": "York"}},
+    ]}
+    out = transform_floods(data)
+    assert [f["id"] for f in out] == ["a1", "a2"]
+    assert out[0]["severity"] == 2 and out[0]["area"] == "River Parrett at Langport"

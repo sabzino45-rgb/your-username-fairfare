@@ -1,7 +1,8 @@
 import { parseOfferText, manualOffer, estimate, shiftNeed, DEFAULT_SETTINGS, fareFromWords, reconcileScanFare, cleanPixels,
   orderLegsByPosition, reconcileLegOrder } from "./engine.js";
 import { TOWNS, COUNTIES, BANDS, KIND_ICON, nearestTown } from "./southwest.js";
-import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd, hourlyOutlook, bestWindow, hotTowns, radarEvents } from "./demand.js";
+import { weekGrid, currentSlot, nextPeak, placeHotNow, placePatterns, eventEnd, hourlyOutlook, bestWindow, hotTowns, radarEvents, weatherAt } from "./demand.js";
+import { buildNews } from "./news.js";
 import { todayStats, pace, goalStreak, bestTime } from "./progress.js";
 import { LANGUAGES, setLanguage, guessLanguage, t, money, num, weekdayShort, dateTime, dateOnly } from "./i18n.js";
 import * as store from "./store.js";
@@ -31,6 +32,10 @@ const P = {
   bag: '<path d="M6 7h12l1 14H5z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
   school: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
   ship: '<path d="M3 17l2 4h14l2-4"/><path d="M5 17V9h14v8M12 3v6"/>',
+  wave: '<path d="M2 12c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 18c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M12 3v4"/>',
+  bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  news: '<path d="M4 5h13v14a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v10a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5M8 17h3"/>',
+  snow: '<path d="M12 2v20M4.9 6.5l14.2 11M4.9 17.5l14.2-11"/>',
   ticket: '<path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${P[name] || ""}</svg>`;
@@ -84,9 +89,29 @@ let scanGeo = null; // { text, words: [{ text, height, prev }], legsOk }
 const MAX_TEXT = 5000; // cap pasted or OCR text before parsing (huge pastes froze the page)
 const cancelScan = () => { scanSeq++; scanState = null; scanGeo = null; };
 
+function checkHero(s) {
+  const st = todayStats(store.get("history", []));
+  const goal = s.shiftGoal || 0;
+  const pct = goal ? Math.min(100, Math.round((st.take / goal) * 100)) : 0;
+  const tw = TOWNS.find((x) => x.id === town()) || TOWNS[0];
+  const top = newsFor(tw).now[0];
+  return `<section class="hero hero-check">
+    <p class="eyebrow">${esc(t("app.tagline"))}</p>
+    <h1>${esc(t("hero.check"))}</h1>
+    <p class="hero-desc">${esc(t("hero.checkSub"))}</p>
+    <div class="hero-progress">
+      <div class="hp-row"><span>${esc(t("shift.today"))}</span><b dir="ltr">${esc(money(st.take, 0))} / ${esc(money(goal, 0))}</b></div>
+      <div class="hp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="inline-size:${pct}%"></i></div>
+    </div>
+    ${top ? `<a class="ticker" href="#demand" data-tone="${top.tone}"><span class="news-tag">${esc(t("news.tag." + top.kind))}</span>
+      <span class="ticker-text">${esc(newsText(top))}</span><span class="ticker-more">${esc(t("news.all"))} →</span></a>` : ""}
+  </section>`;
+}
+
 function renderCheck() {
   const s = settings();
   view.innerHTML = `
+    ${checkHero(s)}
     <section class="verdict" id="verdict" aria-live="polite"></section>
     <p class="safety">${icon("alert")}<span>${esc(t("check.safety"))}</span></p>
     <section class="card">
@@ -496,7 +521,7 @@ function shiftCard() {
   const best = bestTime(hist);
   const msg = !p ? "" : p.state === "done" ? t("shift.done") : p.state === "notStarted" ? t("shift.notStarted")
     : p.state === "onPace" ? t("shift.onPace") : t("shift.behind", { rate: money(p.need), hours: num(p.hoursLeft, 1) });
-  return `<section class="card">
+  return `<section class="card k-go">
     <div class="card-head"><h2>${esc(t("shift.today"))}</h2>${streak >= 2 ? `<span class="pill" style="color:var(--accent)">${esc(t("shift.streak", { n: num(streak, 0) }))}</span>` : ""}</div>
     <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((p ? p.pct : 0) * 100)}"><i style="width:${Math.round((p ? p.pct : 0) * 100)}%"></i></div>
     <div class="row" style="justify-content:space-between"><b>${ltr(esc(t("shift.progress", { take: money(st.take), goal: money(s.shiftGoal, 0) })))}</b>
@@ -514,7 +539,7 @@ function planCard(tw, events) {
     ...(best.rain ? [t("plan.why.rain")] : []),
   ] : [];
   const wxLine = live.weather && live.weather.start ? t("plan.weatherOn", { time: live.generated ? dateTime(new Date(live.generated)) : "" }) : t("plan.weatherOff");
-  return `<section class="card">
+  return `<section class="card k-blue">
     <div><h2>${esc(t("plan.title"))}</h2><p class="sub">${esc(t("plan.sub", { town: tw.name }))}</p></div>
     <p class="callout" style="margin:0">${best ? `<b>${esc(t("plan.best"))} ${ltr(`${hhmm(best.start)}–${hhmm(best.end)}`)}</b><br><span class="sub">${esc(why.join(" · "))}</span>` : esc(t("plan.quiet"))}</p>
     <div class="strip" role="list">${out.map((h) => `<div class="hr" role="listitem" data-l="${h.level}" title="${esc(t("level." + h.level))}">
@@ -543,7 +568,7 @@ function radarCard(tw, events, now) {
         ${e.url ? `<a class="help" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(t("ev.check"))}</a>` : ""}</div></div></div>`;
   }).join("");
   const seg = (k, v, label) => `<button data-radar="${k}" data-v="${v}" aria-pressed="${radar[k] === v}">${esc(t(label))}</button>`;
-  return `<section class="card">
+  return `<section class="card k-violet">
     <div><h2>${esc(t("radar.title"))}</h2><p class="sub">${esc(t("radar.sub"))}</p></div>
     <div class="seg" role="group">${seg("period", "tonight", "radar.tonight")}${seg("period", "weekend", "radar.weekend")}${seg("period", "week", "radar.week")}${seg("period", "month", "radar.month")}</div>
     <div class="row"><label class="check"><input type="checkbox" id="radar-big" ${radar.bigOnly ? "checked" : ""}> ${esc(t("radar.bigOnly"))}</label>
@@ -552,10 +577,44 @@ function radarCard(tw, events, now) {
   </section>`;
 }
 
+// ---------- driver news ----------
+const NEWS_ICON = { flood: "wave", weather: "rain", rush: "bolt", event: "ticket", big: "stadium", bank: "demand", note: "bell" };
+let newsTab = "now";
+function newsFor(tw, now = new Date()) {
+  return buildNews({ events: allEvents(), floods: live.floods || [], weather: live.weather, bankHolidays: live.bankHolidays || [],
+    notes: store.get("notices", []), town: tw.id, townName: tw.name }, now);
+}
+function newsText(n) {
+  const p = {};
+  for (const [k, v] of Object.entries(n.params)) p[k] = v instanceof Date ? (k === "date" ? dateOnly(v) : hhmm(v)) : String(v ?? "");
+  return t(n.key, p).replace(/\s+\.\s*$/, ".").trim();
+}
+function newsItem(n) {
+  const icn = n.kind === "weather" && n.key === "news.ice" ? "snow" : NEWS_ICON[n.kind] || "news";
+  return `<li class="news-item" data-tone="${n.tone}">
+    <span class="news-ic">${icon(icn)}</span>
+    <div class="news-body"><span class="news-tag">${esc(t("news.tag." + n.kind))}</span><p>${esc(newsText(n))}</p></div>
+    <time dir="ltr">${n.kind === "bank" || n.kind === "big" ? "" : esc(hhmm(n.at))}</time></li>`;
+}
+function newsCard(tw, now) {
+  const news = newsFor(tw, now);
+  const list = newsTab === "now" ? news.now : news.earlier;
+  return `<section class="card news" id="news">
+    <div class="card-head"><div class="title-ic">${icon("news")}<div><h2>${esc(t("news.title"))}${news.now.length ? ` <span class="count">${num(news.now.length, 0)}</span>` : ""}</h2>
+      <p class="sub">${esc(t("news.sub"))}</p></div></div></div>
+    <div class="seg" role="group">
+      <button data-news="now" aria-pressed="${newsTab === "now"}">${esc(t("news.now"))}</button>
+      <button data-news="earlier" aria-pressed="${newsTab === "earlier"}">${esc(t("news.earlier"))}</button></div>
+    ${list.length ? `<ul class="news-list">${list.slice(0, 12).map(newsItem).join("")}</ul>`
+      : `<p class="empty">${esc(t(newsTab === "now" ? "news.none" : "news.noneEarlier"))}</p>`}
+    <p class="note">${esc(t("news.sources"))}</p>
+  </section>`;
+}
+
 function hotCard(events, now) {
   const hot = hotTowns(events, now, new Date(now.getTime() + 48 * 3600e3));
   const max = Math.max(1, ...hot.map((h) => h.score));
-  return `<section class="card">
+  return `<section class="card k-amber">
     <div><h2>${esc(t("hot.title"))}</h2><p class="sub">${esc(t("hot.sub"))}</p></div>
     ${hot.length ? `<div class="bars">${hot.map((h) => `<button class="barrow" data-town="${h.town}">
       <span class="lbl">${esc(townName(h.town))}</span><span class="track"><i style="width:${Math.round(100 * h.score / max)}%"></i></span>
@@ -586,28 +645,31 @@ function renderDemand() {
   const hoursToPeak = peak ? Math.max(0, Math.round((peak.start - now) / 3600e3)) : null;
   const perm = "Notification" in window ? Notification.permission : "denied";
   const alertsOn = store.get("alerts", false);
+  const wxNow = weatherAt(live.weather, tw.id, now);
+  const events24 = events.filter((e) => e.town === tw.id && eventEnd(e) > now && eventEnd(e) - now < 24 * 3600e3).length;
 
   view.innerHTML = `
-    <div><p class="eyebrow">${esc(t("demand.eyebrow"))}</p><h1>${esc(t("demand.title"))}</h1></div>
-    <label class="field">${esc(t("demand.town"))}
-      <select id="town">${COUNTIES.map((c) => `<optgroup label="${esc(c)}">${TOWNS.filter((x) => x.county === c).map((x) =>
-        `<option value="${x.id}" ${x.id === tw.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>
-    <div class="row"><button class="btn small" id="locate">${icon("pin")}${esc(t("demand.useLocation"))}</button><span class="help" id="loc-msg"></span></div>
+    <section class="hero" data-l="${lvl}">
+      <p class="eyebrow">${esc(t("demand.eyebrow"))}</p>
+      <h1>${esc(t("hero.now", { town: tw.name }))}</h1>
+      <div class="hero-level"><span class="pulse" aria-hidden="true"></span>${esc(t("level." + lvl))}</div>
+      <p class="hero-desc">${esc(t("level.desc." + lvl))}</p>
+      <div class="hero-stats">
+        <div><span>${esc(t("demand.nextPeak"))}</span><b>${peak ? `${esc(weekdayShort(peak.day))} ${ltr(`${BANDS[peak.band][0] % 24}–${BANDS[peak.band][1] % 24}`)}` : "—"}</b>
+          <small>${peak ? esc(hoursToPeak < 1 ? t("demand.startsSoon") : t("demand.startsIn", { h: num(hoursToPeak, 0) })) : ""}</small></div>
+        <div><span>${esc(t("hero.weather"))}</span><b>${wxNow && wxNow.temp != null ? ltr(`${num(wxNow.temp, 0)}°`) : "—"}</b>
+          <small>${wxNow ? esc(wxNow.rain ? t("plan.rain") : t("hero.dry")) : ""}</small></div>
+        <div><span>${esc(t("hero.events"))}</span><b>${num(events24, 0)}</b><small>${esc(t("hero.next24"))}</small></div>
+      </div>
+      <div class="hero-town"><select id="town" aria-label="${esc(t("demand.town"))}">${COUNTIES.map((c) => `<optgroup label="${esc(c)}">${TOWNS.filter((x) => x.county === c).map((x) =>
+        `<option value="${x.id}" ${x.id === tw.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</optgroup>`).join("")}</select>
+        <button class="btn small" id="locate">${icon("pin")}<span>${esc(t("demand.useLocation"))}</span></button></div>
+      <span class="help" id="loc-msg"></span>
+    </section>
+    ${newsCard(tw, now)}
     ${bank ? `<p class="callout">${icon("demand")} ${esc(t("bank.notice", { name: bank.title, date: dateTime(new Date(bank.date + "T00:00")).split(",").slice(0, 2).join(",") }))}</p>` : ""}
     ${shiftCard()}
     ${planCard(tw, events)}
-    <div class="grid2">
-      <section class="card">
-        <span class="sub">${esc(t("demand.now"))}</span>
-        <div class="level" style="color:var(--${lvl >= 2 ? "go" : lvl === 1 ? "fg" : "muted"})">${esc(t("level." + lvl))}</div>
-        <p class="sub">${esc(t("level.desc." + lvl))}</p>
-      </section>
-      <section class="card">
-        <span class="sub">${esc(t("demand.nextPeak"))}</span>
-        <div class="level">${peak ? `${esc(weekdayShort(peak.day))} ${ltr(`${BANDS[peak.band][0] % 24}–${BANDS[peak.band][1] % 24}`)}` : "—"}</div>
-        <p class="sub">${peak ? esc(hoursToPeak < 1 ? t("demand.startsSoon") : t("demand.startsIn", { h: num(hoursToPeak, 0) })) : ""}</p>
-      </section>
-    </div>
     <section class="card">
       <div><h2>${esc(t("demand.week"))}</h2><p class="sub">${esc(t("demand.weekSub", { town: tw.name }))}</p></div>
       <div class="heat-wrap"><div class="heat">
@@ -665,6 +727,7 @@ function renderDemand() {
     <p class="note">${esc(t("demand.phase2"))}</p>`;
 
   $("#town").addEventListener("change", (e) => { store.set("town", e.target.value); renderDemand(); });
+  $$("[data-news]").forEach((b) => b.addEventListener("click", () => { newsTab = b.dataset.news; renderDemand(); }));
   $$("[data-radar]").forEach((b) => b.addEventListener("click", () => { radar[b.dataset.radar] = b.dataset.v; store.set("radarPeriod", radar.period); renderDemand(); }));
   $("#radar-big").addEventListener("change", (e) => { radar.bigOnly = e.target.checked; store.set("radarBig", radar.bigOnly); renderDemand(); });
   $("#radar-near").addEventListener("change", (e) => { radar.near = e.target.checked; store.set("radarNear", radar.near); renderDemand(); });

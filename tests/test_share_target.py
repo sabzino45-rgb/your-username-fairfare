@@ -86,3 +86,12 @@ def test_text_capped_and_word_never_breaks():
     word = re.search(r"\n\.word \{([^}]*)\}", css).group(1)
     assert "white-space: nowrap" in word and "overflow-wrap: anywhere" not in word
     assert "function fitWord" in app
+
+
+def test_every_module_is_cached_offline():
+    import glob
+    import re
+    sw = read("sw.js")
+    shell = set(re.findall(r'"(js/[a-z0-9]+\.js)"', sw))
+    on_disk = {"js/" + os.path.basename(p) for p in glob.glob(os.path.join(os.path.dirname(__file__), "..", "app", "js", "*.js"))}
+    assert on_disk <= shell, f"missing from sw.js SHELL: {sorted(on_disk - shell)}"

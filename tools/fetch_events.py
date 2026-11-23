@@ -29,6 +29,10 @@ TM_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
 BANK_URL = "https://www.gov.uk/bank-holidays.json"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_HOURS = 36
+FLOOD_URL = "https://environment.data.gov.uk/flood-monitoring/id/floods"  # Environment Agency, Open Government Licence
+SW_COUNTIES = ("Cornwall", "Isles of Scilly", "Devon", "Plymouth", "Torbay", "Somerset", "North Somerset",
+               "Bath and North East Somerset", "Bristol", "South Gloucestershire", "Gloucestershire",
+               "Wiltshire", "Swindon", "Dorset", "Bournemouth", "Christchurch and Poole", "Poole")
 TOWNS_JS = os.path.join(os.path.dirname(__file__), "..", "app", "js", "southwest.js")
 DAYS_AHEAD = 30
 UA = {"User-Agent": "FairFare-events/1.0"}
@@ -201,9 +205,30 @@ def fetch_weather(towns: list[tuple[str, float, float]], chunk: int = 40) -> dic
     return transform_weather(ids, responses)
 
 
+def transform_floods(data: dict) -> list[dict]:
+    """Environment Agency flood warnings in South West counties. severityLevel: 1 severe, 2 warning,
+    3 alert, 4 no longer in force. Pure function, tested without the network."""
+    out = []
+    for it in data.get("items", []):
+        area = it.get("floodArea") or {}
+        county = area.get("county") or ""
+        if not any(c.strip() in SW_COUNTIES for c in county.split(",")):
+            continue
+        out.append({
+            "id": str(it.get("floodAreaID") or it.get("@id") or ""),
+            "area": (it.get("description") or area.get("riverOrSea") or "")[:120],
+            "county": county,
+            "severity": int(it.get("severityLevel") or 4),
+            "raised": it.get("timeRaised") or "",
+            "changed": it.get("timeMessageChanged") or it.get("timeRaised") or "",
+        })
+    out.sort(key=lambda f: (f["severity"], f["area"]))
+    return out[:60]
+
+
 def main(out_path: str) -> int:
     result = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "sources": [], "events": [], "bankHolidays": [], "weather": None, "notes": []}
+              "sources": [], "events": [], "bankHolidays": [], "weather": None, "floods": [], "notes": []}
     key = os.environ.get("TICKETMASTER_API_KEY", "").strip()
     if key:
         try:
@@ -228,8 +253,13 @@ def main(out_path: str) -> int:
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
+    try:
+        result["floods"] = transform_floods(get_json(FLOOD_URL))
+        result["sources"].append("Environment Agency")
+    except Exception as e:  # noqa: BLE001
+        result["notes"].append(f"floods_failed: {type(e).__name__}")
     n_weather = len((result["weather"] or {}).get("towns", {}))
-    print(f"events={len(result['events'])} bank_holidays={len(result['bankHolidays'])} weather_towns={n_weather} notes={result['notes']}")
+    print(f"events={len(result['events'])} bank_holidays={len(result['bankHolidays'])} weather_towns={n_weather} floods={len(result['floods'])} notes={result['notes']}")
     return 0
 
 
